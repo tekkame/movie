@@ -111,3 +111,8 @@ CREATE POLICY "watch_status_owner_write"
   TO authenticated
   USING (LOWER(auth.jwt() ->> 'email') = LOWER('tekkame@gmail.com'))
   WITH CHECK (LOWER(auth.jwt() ->> 'email') = LOWER('tekkame@gmail.com'));
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT ON public.movies TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_watch_status TO anon, authenticated;
+GRANT ALL ON public.movies, public.omdb_cache, public.user_watch_status TO service_role;
