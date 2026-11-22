@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Core Cinema Archive｜年別・本当に面白い映画データベース</title>
+  <meta name="description" content="1980年〜現在までの名作映画を批評家・観客・映画賞スコアと個人マッチ度で絞り込めるシネマアーカイブ。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -11,16 +15,16 @@
   <header class="site-header">
     <div class="header-inner">
       <div class="brand">
-        <span class="brand-mark">🎬</span>
-        <div>
+        <span class="brand-mark" aria-hidden="true">🎬</span>
+        <div class="brand-text">
           <h1>Core Cinema Archive</h1>
-          <p class="subtitle">1980年〜現在｜批評家 × 観客 × 映画賞 ＋ ジャンル代表枠で自動抽出</p>
+          <p class="subtitle">1980年〜現在｜批評家 × 観客 × 映画賞 ＋ ジャンル代表枠</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをGemini相談用にコピー">🧠 好みデータをコピー</button>
+        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">🧠 好みコピー</button>
         <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
-        <button id="auth-btn" class="btn btn-secondary" type="button">🔒 記録用ログイン</button>
+        <button id="auth-btn" class="btn btn-secondary" type="button">🔒 ログイン</button>
       </div>
     </div>
   </header>
@@ -35,7 +39,7 @@
         <button type="button" class="preset-btn" data-preset="tonight_for_me">🔥 今すぐ観られる自分向け</button>
         <button type="button" class="preset-btn" data-preset="weekday_short">⏱ 平日サクッと</button>
         <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
-        <button type="button" class="preset-btn" data-preset="horror_thriller">👻 刺激的なホラー・スリラー</button>
+        <button type="button" class="preset-btn" data-preset="horror_thriller">👻 ホラー・スリラー</button>
       </div>
       <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
     </section>
@@ -45,7 +49,7 @@
         <div class="filter-group">
           <label for="filter-decade">年代</label>
           <select id="filter-decade">
-            <option value="all">すべての年代（1980〜）</option>
+            <option value="all">すべて（1980〜）</option>
             <option value="2020s">2020年代</option>
             <option value="2010s">2010年代</option>
             <option value="2000s">2000年代</option>
@@ -62,7 +66,7 @@
         </div>
 
         <div class="filter-group">
-          <label for="filter-provider">配信サービス（日本）</label>
+          <label for="filter-provider">配信サービス</label>
           <select id="filter-provider">
             <option value="all">指定なし</option>
             <option value="U-NEXT">U-NEXT</option>
@@ -110,13 +114,13 @@
         </div>
       </div>
 
-      <div class="filter-row filter-row-secondary">
+      <div class="filter-row-secondary">
         <div class="search-wrap">
           <input id="filter-query" type="search" placeholder="邦題・原題・監督名・タグで検索..." />
         </div>
         <label class="checkbox-label">
           <input id="filter-flatrate-only" type="checkbox" />
-          <span>見放題のみに絞る</span>
+          <span>見放題のみ</span>
         </label>
         <div class="filter-group compact">
           <select id="filter-sort" aria-label="並び順">
@@ -127,15 +131,18 @@
             <option value="meta_desc">批評家評価（Metascore）が高い順</option>
           </select>
         </div>
-        <button id="reset-filters-btn" class="btn btn-ghost" type="button">条件リセット</button>
+        <button id="reset-filters-btn" class="btn btn-ghost" type="button">リセット</button>
       </div>
     </section>
 
     <div class="results-bar">
-      <div id="results-count" class="results-count">読み込み中...</div>
+      <div class="results-summary">
+        <div id="results-count" class="results-count">読み込み中...</div>
+        <div id="watch-stats-pill" class="watch-stats-pill"></div>
+      </div>
       <div class="legend">
         <span class="legend-item"><span class="dot dot-top"></span>総合TOP12</span>
-        <span class="legend-item"><span class="dot dot-genre"></span>ジャンル代表枠</span>
+        <span class="legend-item"><span class="dot dot-genre"></span>代表枠</span>
       </div>
     </div>
 
@@ -155,7 +162,7 @@
           <h2>🎲 今夜の3本ガチャ</h2>
           <p id="gacha-subtitle" class="gacha-subtitle"></p>
         </div>
-        <button type="button" class="icon-close" data-close-modal="gacha-modal">✕</button>
+        <button type="button" class="icon-close" data-close-modal="gacha-modal" aria-label="閉じる">✕</button>
       </div>
       <div id="gacha-results" class="gacha-results"></div>
       <div class="gacha-footer">
@@ -170,9 +177,9 @@
     <form id="auth-form" class="auth-form">
       <div class="modal-header">
         <h2>記録用ログイン</h2>
-        <button type="button" class="icon-close" data-close-modal="auth-modal">✕</button>
+        <button type="button" class="icon-close" data-close-modal="auth-modal" aria-label="閉じる">✕</button>
       </div>
-      <p class="auth-note">視聴ステータス・評価の保存はオーナーのメールアドレスのみ許可されています。ログイン用リンクをメールで送信します。</p>
+      <p class="auth-note">未ログインでもブラウザに即時保存されます。ログインするとSupabaseクラウドと自動同期します（オーナーのみ書き込み可）。</p>
       <label for="auth-email">メールアドレス</label>
       <input id="auth-email" type="email" required placeholder="you@example.com" />
       <div class="auth-actions">

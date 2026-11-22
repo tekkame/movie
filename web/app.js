@@ -226,6 +226,7 @@ const IMPRESSION_TAG_GROUPS = [
 ];
 
 const IMPRESSION_TAGS_CACHE_KEY = "core_cinema_impression_tags_cache";
+const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
 
 const state = {
   supabase: null,
@@ -238,6 +239,8 @@ const state = {
   tasteProfile: { ...DEFAULT_TASTE_PROFILE },
   activePreset: null,
   presetGenres: null, // 例: ["Horror", "Thriller"] (プリセット用ORマッチ)
+  isSyncingLocalToCloud: false,
+  hasShownOfflineSaveHint: false,
 };
 
 function normalizeSupabaseUrl(url) {
@@ -266,16 +269,33 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;");
 }
 
-function loadDemoWatchMap() {
+function loadLocalWatchMap() {
   try {
-    return JSON.parse(localStorage.getItem("core_cinema_demo_watch") || "{}");
+    const raw = JSON.parse(localStorage.getItem(LOCAL_WATCH_STORAGE_KEY) || "{}");
+    const result = {};
+    for (const [id, entry] of Object.entries(raw || {})) {
+      if (entry && typeof entry === "object") {
+        result[id] = normalizeWatchEntry(entry);
+      }
+    }
+    return result;
   } catch {
     return {};
   }
 }
 
-function saveDemoWatchMap() {
-  localStorage.setItem("core_cinema_demo_watch", JSON.stringify(state.watchMap));
+function saveLocalWatchMap(watchMapObj = state.watchMap) {
+  try {
+    localStorage.setItem(LOCAL_WATCH_STORAGE_KEY, JSON.stringify(watchMapObj || {}));
+  } catch {
+    // localStorage利用不可時は無視
+  }
+}
+
+function saveLocalWatchEntry(imdbId, entry) {
+  const localMap = loadLocalWatchMap();
+  localMap[imdbId] = normalizeWatchEntry(entry);
+  saveLocalWatchMap(localMap);
 }
 
 function loadImpressionTagsCache() {
@@ -303,7 +323,7 @@ function saveImpressionTagsCache(imdbId, tags) {
 
 function normalizeWatchEntry(row) {
   if (!row) {
-    return { status: "unwatched", my_rating: null, impression_tags: [], memo: "" };
+    return { status: "unwatched", my_rating: null, impression_tags: [], memo: "", updated_at: null };
   }
   return {
     ...row,
@@ -311,7 +331,18 @@ function normalizeWatchEntry(row) {
     my_rating: row.my_rating != null ? Number(row.my_rating) : null,
     impression_tags: Array.isArray(row.impression_tags) ? row.impression_tags.filter(Boolean) : [],
     memo: row.memo || "",
+    updated_at: row.updated_at || null,
   };
+}
+
+function isMeaningfulWatchEntry(entry) {
+  if (!entry) return false;
+  return (
+    (entry.status && entry.status !== "unwatched") ||
+    entry.my_rating != null ||
+    (Array.isArray(entry.impression_tags) && entry.impression_tags.length > 0) ||
+    Boolean(entry.memo && String(entry.memo).trim())
+  );
 }
 
 function activateDemoMode(customMessageHtml = null) {
@@ -319,7 +350,7 @@ function activateDemoMode(customMessageHtml = null) {
   state.user = null;
   state.userEmail = null;
   state.movies = DEMO_MOVIES;
-  const rawMap = loadDemoWatchMap();
+  const rawMap = loadLocalWatchMap();
   const cache = loadImpressionTagsCache();
   state.watchMap = {};
   for (const [id, entry] of Object.entries(rawMap)) {
@@ -498,7 +529,8 @@ function openAuthModal() {
   }
 }
 
-function showToast(message) {
+function showToast(message, options = {}) {
+  const { actionLabel = null, onAction = null, durationMs = 3200 } = options;
   let toast = document.getElementById("app-toast");
   if (!toast) {
     toast = document.createElement("div");
@@ -506,12 +538,29 @@ function showToast(message) {
     toast.className = "app-toast";
     document.body.appendChild(toast);
   }
-  toast.textContent = message;
+  toast.innerHTML = "";
+
+  const textSpan = document.createElement("span");
+  textSpan.textContent = message;
+  toast.appendChild(textSpan);
+
+  if (actionLabel && typeof onAction === "function") {
+    const actionBtn = document.createElement("button");
+    actionBtn.type = "button";
+    actionBtn.className = "toast-action-btn";
+    actionBtn.textContent = actionLabel;
+    actionBtn.addEventListener("click", () => {
+      toast.classList.remove("show");
+      onAction();
+    });
+    toast.appendChild(actionBtn);
+  }
+
   toast.classList.add("show");
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(() => {
     toast.classList.remove("show");
-  }, 2400);
+  }, durationMs);
 }
 
 async function initApp() {
@@ -525,13 +574,24 @@ async function initApp() {
     const { data: sessionData } = await state.supabase.auth.getSession();
     state.user = sessionData?.session?.user || null;
     state.userEmail = state.user?.email || null;
-    state.supabase.auth.onAuthStateChange((_event, session) => {
+
+    await loadSupabaseData();
+    if (state.userEmail) {
+      await syncLocalWatchMapToSupabase({ silentIfEmpty: true });
+    }
+
+    state.supabase.auth.onAuthStateChange(async (event, session) => {
+      const prevEmail = state.userEmail;
       state.user = session?.user || null;
       state.userEmail = state.user?.email || null;
       updateAuthUI();
-    });
 
-    await loadSupabaseData();
+      if (state.userEmail && !prevEmail && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        await loadSupabaseData();
+        await syncLocalWatchMapToSupabase({ silentIfEmpty: true });
+        renderMovies();
+      }
+    });
   } else {
     activateDemoMode();
   }
@@ -572,6 +632,27 @@ async function fetchAllMoviesPaginated() {
   return { data: allMovies, error: null };
 }
 
+function mergeWatchEntry(remoteEntry, localEntry) {
+  if (!remoteEntry && !localEntry) return null;
+  if (!remoteEntry) return normalizeWatchEntry(localEntry);
+  if (!localEntry) return normalizeWatchEntry(remoteEntry);
+
+  const remoteNorm = normalizeWatchEntry(remoteEntry);
+  const localNorm = normalizeWatchEntry(localEntry);
+  const remoteTime = remoteNorm.updated_at ? Date.parse(remoteNorm.updated_at) : 0;
+  const localTime = localNorm.updated_at ? Date.parse(localNorm.updated_at) : 0;
+
+  if (localTime > remoteTime) {
+    return {
+      ...localNorm,
+      impression_tags:
+        localNorm.impression_tags.length > 0 ? localNorm.impression_tags : remoteNorm.impression_tags,
+      memo: localNorm.memo || remoteNorm.memo,
+    };
+  }
+  return remoteNorm;
+}
+
 async function loadSupabaseData() {
   const [moviesRes, watchRes] = await Promise.all([
     fetchAllMoviesPaginated(),
@@ -597,12 +678,83 @@ async function loadSupabaseData() {
   state.movies = moviesRes.data || [];
   state.watchMap = {};
   const cache = loadImpressionTagsCache();
+  const remoteMap = {};
+
   for (const row of watchRes.data || []) {
     const norm = normalizeWatchEntry(row);
     if (norm.impression_tags.length === 0 && Array.isArray(cache[row.imdb_id])) {
       norm.impression_tags = cache[row.imdb_id];
     }
-    state.watchMap[row.imdb_id] = norm;
+    remoteMap[row.imdb_id] = norm;
+  }
+
+  const localMap = loadLocalWatchMap();
+  const validMovieIds = new Set(state.movies.map((m) => m.imdb_id));
+
+  for (const [id, remoteEntry] of Object.entries(remoteMap)) {
+    state.watchMap[id] = remoteEntry;
+  }
+
+  // 未ログイン時にブラウザ(localStorage)へ保存された記録をマージして即時反映
+  for (const [id, localEntry] of Object.entries(localMap)) {
+    if (!validMovieIds.has(id)) continue;
+    if (!remoteMap[id]) {
+      if (isMeaningfulWatchEntry(localEntry)) {
+        state.watchMap[id] = localEntry;
+      }
+      continue;
+    }
+    state.watchMap[id] = mergeWatchEntry(remoteMap[id], localEntry);
+  }
+}
+
+async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
+  if (state.isDemo || !state.supabase || !state.userEmail || state.isSyncingLocalToCloud) {
+    return;
+  }
+  const localMap = loadLocalWatchMap();
+  const validMovieIds = new Set(state.movies.map((m) => m.imdb_id));
+  const pendingPayloads = [];
+
+  for (const [imdbId, localEntry] of Object.entries(localMap)) {
+    if (!validMovieIds.has(imdbId)) continue;
+    if (!isMeaningfulWatchEntry(localEntry)) continue;
+    pendingPayloads.push({
+      imdb_id: imdbId,
+      status: localEntry.status || "unwatched",
+      my_rating: localEntry.my_rating != null ? Number(localEntry.my_rating) : null,
+      impression_tags: Array.isArray(localEntry.impression_tags) ? localEntry.impression_tags : [],
+      memo: localEntry.memo ? String(localEntry.memo) : null,
+      updated_at: localEntry.updated_at || new Date().toISOString(),
+    });
+  }
+
+  if (pendingPayloads.length === 0) {
+    if (!silentIfEmpty) {
+      showToast("クラウド同期完了：未同期のローカル記録はありません。");
+    }
+    return;
+  }
+
+  state.isSyncingLocalToCloud = true;
+  try {
+    let { error } = await state.supabase.from("user_watch_status").upsert(pendingPayloads);
+    if (error && isMissingColumnError(error, "impression_tags")) {
+      const fallback = pendingPayloads.map(({ impression_tags: _omit, ...rest }) => rest);
+      const retry = await state.supabase.from("user_watch_status").upsert(fallback);
+      error = retry.error;
+    }
+    if (!error) {
+      saveLocalWatchMap({});
+      for (const p of pendingPayloads) {
+        state.watchMap[p.imdb_id] = normalizeWatchEntry(p);
+      }
+      showToast(`ブラウザに保存されていた ${pendingPayloads.length} 件の記録をクラウドへ同期しました`);
+    } else {
+      console.error("ローカル記録の同期エラー:", error);
+    }
+  } finally {
+    state.isSyncingLocalToCloud = false;
   }
 }
 
@@ -610,20 +762,21 @@ function updateAuthUI() {
   const badge = document.getElementById("auth-status-badge");
   const btn = document.getElementById("auth-btn");
   if (state.isDemo) {
-    badge.textContent = "デモ保存（ブラウザ）";
-    btn.textContent = "Supabase未接続";
+    badge.textContent = "ブラウザ保存";
+    badge.className = "badge badge-muted";
+    btn.textContent = "Demo";
     btn.disabled = true;
     return;
   }
   btn.disabled = false;
   if (state.user) {
-    badge.textContent = `ログイン中: ${state.userEmail || state.user.email}`;
+    badge.textContent = `同期中: ${state.userEmail || state.user.email}`;
     badge.className = "badge badge-flatrate";
     btn.textContent = "ログアウト";
   } else {
-    badge.textContent = "閲覧モード";
+    badge.textContent = "ブラウザ保存モード";
     badge.className = "badge badge-muted";
-    btn.textContent = "🔒 記録用ログイン";
+    btn.textContent = "🔒 同期ログイン";
   }
 }
 
@@ -842,13 +995,33 @@ function renderQuickBar(movie, watchEntry) {
   `;
 }
 
+function updateWatchStatsSummary() {
+  const el = document.getElementById("watch-stats-pill");
+  if (!el) return;
+  let watchedCount = 0;
+  let watchlistCount = 0;
+  for (const entry of Object.values(state.watchMap)) {
+    if (!entry) continue;
+    if (entry.status === "watched" || entry.my_rating != null) {
+      watchedCount += 1;
+    } else if (entry.status === "watchlist") {
+      watchlistCount += 1;
+    }
+  }
+  el.innerHTML = `
+    <span class="watch-stat-chip watched">✓ 観た ${watchedCount}</span>
+    <span class="watch-stat-chip watchlist">🔖 観たい ${watchlistCount}</span>
+  `;
+}
+
 function renderMovies() {
   const list = getFilteredMovies();
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
+  updateWatchStatsSummary();
 
   if (list.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-muted)">条件に一致する映画がありません。フィルタを緩めてお試しください。</p>`;
+    grid.innerHTML = `<p class="empty-state">条件に一致する映画がありません。フィルタを緩めてお試しください。</p>`;
     return;
   }
 
@@ -856,31 +1029,51 @@ function renderMovies() {
     .map((m) => {
       const w = state.watchMap[m.imdb_id];
       const isWatched = w?.status === "watched";
+      const isWatchlist = w?.status === "watchlist";
       const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
       const slotClass = m.selection_slot === "top12" ? "slot-top12" : "slot-genre";
       const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
-      const statusBadge =
-        w?.status === "watched"
-          ? `<span class="badge badge-status">視聴済み${w.my_rating ? ` ★${w.my_rating}` : ""}</span>`
-          : w?.status === "watchlist"
-            ? `<span class="badge badge-status">観たい</span>`
-            : "";
+      const isHighMatch = matchScore >= 85;
+
+      const ribbonHtml = isWatched
+        ? `<span class="watched-ribbon">✓ WATCHED${w?.my_rating ? ` ★${w.my_rating}` : ""}</span>`
+        : isWatchlist
+          ? `<span class="watchlist-ribbon">🔖 観たい</span>`
+          : "";
+
+      const statusBadge = isWatched
+        ? `<span class="badge badge-status">視聴済み${w.my_rating ? ` ★${w.my_rating}` : ""}</span>`
+        : isWatchlist
+          ? `<span class="badge badge-status-watchlist">観たい</span>`
+          : "";
+
+      const cardClasses = [
+        "movie-card",
+        isWatched ? "is-watched" : "",
+        isWatchlist ? "is-watchlist" : "",
+        isHighMatch ? "is-high-match" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
 
       return `
-        <article class="movie-card ${isWatched ? "is-watched" : ""}" data-imdb-id="${escapeHtml(m.imdb_id)}">
+        <article class="${cardClasses}" data-imdb-id="${escapeHtml(m.imdb_id)}">
           <div class="poster-wrap">
             ${
               m.poster_url
                 ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
                 : `<div class="poster-fallback"><strong>${escapeHtml(m.title_ja)}</strong><span>${escapeHtml(m.title_en)}</span></div>`
             }
-            <span class="score-pill">${Number(m.composite_score).toFixed(1)}点</span>
+            <span class="score-pill">${Number(m.composite_score).toFixed(1)}</span>
             <span class="slot-pill ${slotClass}">${escapeHtml(m.selection_category)}</span>
-            <span class="match-pill" title="あなたへのマッチ度">自分マッチ ${matchScore}%</span>
+            <div class="poster-bottom-badges">
+              <span class="match-pill" title="あなたへのマッチ度">マッチ ${matchScore}%</span>
+              ${ribbonHtml}
+            </div>
           </div>
           <div class="card-body">
             <div class="card-meta">
-              <span>${m.release_year}年 #${m.year_rank}</span>
+              <span>${m.release_year}年 · #${m.year_rank}</span>
               <span>${m.runtime_minutes ? `${m.runtime_minutes}分` : ""}</span>
             </div>
             <h2 class="card-title">${escapeHtml(m.title_ja)}</h2>
@@ -889,9 +1082,8 @@ function renderMovies() {
               <span class="metric-chip">IMDb ${m.imdb_rating ?? "-"}</span>
               ${m.metascore != null ? `<span class="metric-chip">Meta ${m.metascore}</span>` : ""}
               ${m.rt_score != null ? `<span class="metric-chip">RT ${m.rt_score}%</span>` : ""}
-              <span class="metric-chip metric-match">マッチ ${matchScore}%</span>
             </div>
-            ${renderMoodTags(m.mood_tags, 3)}
+            ${renderMoodTags(m.mood_tags, 2)}
             <div class="providers-row">
               ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
               ${statusBadge}
@@ -918,12 +1110,19 @@ function isMissingColumnError(error, columnName) {
 }
 
 async function upsertWatchStatus(payload) {
+  const normalized = normalizeWatchEntry(payload);
   saveImpressionTagsCache(payload.imdb_id, payload.impression_tags);
+  state.watchMap[payload.imdb_id] = normalized;
 
   if (state.isDemo) {
-    state.watchMap[payload.imdb_id] = normalizeWatchEntry(payload);
-    saveDemoWatchMap();
-    return { error: null };
+    saveLocalWatchMap(state.watchMap);
+    return { error: null, mode: "local" };
+  }
+
+  // 未ログイン時は即座にブラウザ(localStorage)へ保存して操作を止めない
+  if (!state.userEmail) {
+    saveLocalWatchEntry(payload.imdb_id, normalized);
+    return { error: null, mode: "local" };
   }
 
   let { error } = await state.supabase.from("user_watch_status").upsert(payload);
@@ -934,18 +1133,37 @@ async function upsertWatchStatus(payload) {
     error = retryRes.error;
   }
 
-  if (!error) {
-    state.watchMap[payload.imdb_id] = normalizeWatchEntry(payload);
+  if (error) {
+    // クラウド失敗時もローカルバックアップは保持
+    saveLocalWatchEntry(payload.imdb_id, normalized);
+    return { error, mode: "error" };
   }
-  return { error };
+
+  // クラウド保存が成功したらローカル未同期キューから対象IDを除去
+  const localMap = loadLocalWatchMap();
+  if (localMap[payload.imdb_id]) {
+    delete localMap[payload.imdb_id];
+    saveLocalWatchMap(localMap);
+  }
+  return { error: null, mode: "cloud" };
+}
+
+function notifyLocalSaveOnce() {
+  if (state.isDemo) {
+    if (!state.hasShownOfflineSaveHint) {
+      state.hasShownOfflineSaveHint = true;
+      showToast("ブラウザに保存しました");
+    }
+    return;
+  }
+  showToast("ブラウザに保存しました（クラウド同期するにはログイン）", {
+    actionLabel: "ログイン",
+    onAction: openAuthModal,
+    durationMs: 3600,
+  });
 }
 
 async function handleQuickAction(action, imdbId, ratingValue = null) {
-  if (!state.isDemo && !state.userEmail) {
-    openAuthModal();
-    return;
-  }
-
   const prev = normalizeWatchEntry(state.watchMap[imdbId]);
   let nextStatus = prev.status;
   let nextRating = prev.my_rating;
@@ -978,17 +1196,23 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
 
   // Optimistic UI: 先にローカル状態を更新して即座に再描画
   state.watchMap[imdbId] = normalizeWatchEntry(payload);
-  if (state.isDemo) {
-    saveDemoWatchMap();
+  if (state.isDemo || !state.userEmail) {
+    saveLocalWatchEntry(imdbId, payload);
   }
   renderMovies();
 
-  const { error } = await upsertWatchStatus(payload);
+  const { error, mode } = await upsertWatchStatus(payload);
   if (error) {
-    // 失敗時はロールバック
-    state.watchMap[imdbId] = prev;
-    renderMovies();
-    alert(`保存エラー: ${error.message}`);
+    // クラウド保存に失敗した場合はローカルには保持しつつ通知
+    showToast(`クラウド同期に失敗（ブラウザに一時保存済み）: ${error.message}`, {
+      actionLabel: "ログイン",
+      onAction: openAuthModal,
+    });
+    return;
+  }
+
+  if (mode === "local") {
+    notifyLocalSaveOnce();
   }
 }
 
@@ -997,14 +1221,15 @@ function openMovieModal(imdbId) {
   if (!m) return;
   const w = normalizeWatchEntry(state.watchMap[imdbId]);
   const jp = m.jp_providers || { flatrate: [], rent: [], buy: [], link: null };
-  const canWrite = state.isDemo || Boolean(state.user);
+  const isCloudLoggedIn = !state.isDemo && Boolean(state.userEmail);
+  const canWrite = true;
   const userSignals = buildUserPreferenceSignals();
   const matchScore = computeMatchScore(m, state.tasteProfile, userSignals);
 
   const modal = document.getElementById("movie-modal");
   const hasBackdrop = Boolean(m.backdrop_url);
   const backdropBanner = hasBackdrop
-    ? `<div class="modal-backdrop-banner" style="background-image:url('${escapeHtml(m.backdrop_url)}')"><button type="button" class="icon-close" data-close-modal="movie-modal">✕</button></div>`
+    ? `<div class="modal-backdrop-banner" style="background-image:url('${escapeHtml(m.backdrop_url)}')"><button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">✕</button></div>`
     : "";
 
   const selectedImpressionSet = new Set(w.impression_tags || []);
@@ -1023,15 +1248,19 @@ function openMovieModal(imdbId) {
     `;
   }).join("");
 
+  const syncHintHtml = isCloudLoggedIn
+    ? `<span class="watch-sync-hint">☁️ クラウド同期ON</span>`
+    : `<span class="watch-sync-hint">💾 ブラウザ保存（ログインでクラウド同期）</span>`;
+
   document.getElementById("modal-body").innerHTML = `
     ${backdropBanner}
     <div style="${hasBackdrop ? "padding:16px 20px 20px" : ""}">
       <div class="modal-header">
         <div>
-          <h2>${escapeHtml(m.title_ja)} <span style="color:var(--text-muted);font-size:0.9rem">(${m.release_year})</span></h2>
+          <h2>${escapeHtml(m.title_ja)} <span style="color:var(--text-secondary);font-size:0.9rem">(${m.release_year})</span></h2>
           <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${escapeHtml(m.director || "不明")}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}</div>
         </div>
-        ${hasBackdrop ? "" : `<button type="button" class="icon-close" data-close-modal="movie-modal">✕</button>`}
+        ${hasBackdrop ? "" : `<button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">✕</button>`}
       </div>
 
       <div class="modal-grid">
@@ -1058,7 +1287,7 @@ function openMovieModal(imdbId) {
           ${m.ai_summary ? `<div class="detail-section"><h3>観るべき理由（AI解説）</h3><p style="margin:0;font-size:0.9rem">${escapeHtml(m.ai_summary)}</p></div>` : ""}
           <div class="detail-section">
             <h3>あらすじ</h3>
-            <p style="margin:0;font-size:0.88rem;color:var(--text-muted)">${escapeHtml(m.overview_ja || "日本語あらすじ未登録")}</p>
+            <p style="margin:0;font-size:0.88rem;color:var(--text-secondary)">${escapeHtml(m.overview_ja || "日本語あらすじ未登録")}</p>
           </div>
 
           <div class="detail-section">
@@ -1068,18 +1297,21 @@ function openMovieModal(imdbId) {
               ${(jp.rent || []).map((p) => `<span class="badge badge-rent">レンタル: ${escapeHtml(p)}</span>`).join("")}
               ${!jp.flatrate?.length && !jp.rent?.length ? `<span class="badge badge-muted">現在配信情報なし</span>` : ""}
             </div>
-            ${jp.link ? `<p style="margin:8px 0 0;font-size:0.82rem"><a href="${escapeHtml(jp.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--teal)">配信ページ（TMDB/JustWatch）を開く ↗</a></p>` : ""}
+            ${jp.link ? `<p style="margin:8px 0 0;font-size:0.82rem"><a href="${escapeHtml(jp.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan-bright)">配信ページ（TMDB/JustWatch）を開く ↗</a></p>` : ""}
           </div>
         </div>
       </div>
 
       <div class="watch-controls">
-        <strong>あなたの視聴記録 ${canWrite ? "" : "（保存するには右上からログインしてください）"}</strong>
+        <div class="watch-controls-header">
+          <strong>あなたの視聴記録</strong>
+          ${syncHintHtml}
+        </div>
         <div class="status-buttons">
-          <button type="button" class="btn btn-secondary ${w.status === "unwatched" ? "active" : ""}" data-status="unwatched" ${canWrite ? "" : "disabled"}>未視聴</button>
-          <button type="button" class="btn btn-secondary ${w.status === "watchlist" ? "active" : ""}" data-status="watchlist" ${canWrite ? "" : "disabled"}>観たい</button>
-          <button type="button" class="btn btn-secondary ${w.status === "watched" ? "active" : ""}" data-status="watched" ${canWrite ? "" : "disabled"}>視聴済み</button>
-          <select id="modal-rating" style="width:auto" ${canWrite ? "" : "disabled"}>
+          <button type="button" class="btn btn-secondary ${w.status === "unwatched" ? "active" : ""}" data-status="unwatched">未視聴</button>
+          <button type="button" class="btn btn-secondary ${w.status === "watchlist" ? "active" : ""}" data-status="watchlist">観たい</button>
+          <button type="button" class="btn btn-secondary ${w.status === "watched" ? "active" : ""}" data-status="watched">視聴済み</button>
+          <select id="modal-rating" style="width:auto">
             <option value="">自分評価なし</option>
             ${[5, 4, 3, 2, 1].map((n) => `<option value="${n}" ${Number(w.my_rating) === n ? "selected" : ""}>★${n}</option>`).join("")}
           </select>
@@ -1090,8 +1322,8 @@ function openMovieModal(imdbId) {
           ${impressionGroupsHtml}
         </div>
 
-        <textarea id="modal-memo" rows="2" placeholder="感想やメモ..." ${canWrite ? "" : "disabled"}>${escapeHtml(w.memo || "")}</textarea>
-        ${canWrite ? `<div><button id="save-watch-btn" type="button" class="btn btn-primary" data-imdb-id="${escapeHtml(imdbId)}">記録を保存</button></div>` : ""}
+        <textarea id="modal-memo" rows="2" placeholder="感想やメモ...">${escapeHtml(w.memo || "")}</textarea>
+        <div><button id="save-watch-btn" type="button" class="btn btn-primary" data-imdb-id="${escapeHtml(imdbId)}">記録を保存</button></div>
       </div>
     </div>
   `;
@@ -1133,10 +1365,13 @@ function openMovieModal(imdbId) {
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await upsertWatchStatus(payload);
+      const { error, mode } = await upsertWatchStatus(payload);
       if (error) {
-        alert(`保存エラー: ${error.message}`);
-        return;
+        showToast(`クラウド同期に失敗（ブラウザに一時保存済み）: ${error.message}`);
+      } else if (mode === "local") {
+        notifyLocalSaveOnce();
+      } else {
+        showToast("視聴記録をクラウドに保存しました");
       }
       modal.close();
       renderMovies();
