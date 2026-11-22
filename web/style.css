@@ -1569,3 +1569,446 @@ textarea::placeholder {
     border-radius: 14px;
   }
 }
+
+/* ============================================================================
+   Taste Analytics & Usage Guide Dashboard Panel
+   ============================================================================ */
+
+.taste-guide-panel {
+  background: linear-gradient(155deg, rgba(18, 22, 34, 0.92), rgba(11, 13, 20, 0.92));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  width: 100%;
+  min-width: 0;
+}
+
+.taste-guide-panel.is-collapsed .tg-body {
+  display: none;
+}
+
+.taste-guide-panel.is-collapsed {
+  padding-bottom: 12px;
+}
+
+#toggle-taste-panel-btn.active {
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
+  background: var(--gold-soft);
+}
+
+.tg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tg-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-dock);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.tg-tab {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tg-tab:hover {
+  color: var(--text-primary);
+}
+
+.tg-tab.active {
+  background: var(--gold-soft);
+  color: var(--gold-bright);
+  box-shadow: inset 0 0 0 1px var(--gold-border);
+}
+
+.tg-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tg-summary-pill {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--emerald-bright);
+  background: var(--emerald-soft);
+  border: 1px solid var(--emerald-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tg-collapse-btn {
+  padding: 5px 10px;
+  font-size: 0.76rem;
+}
+
+.tg-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.taste-analytics-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tg-col-profile,
+.tg-col-recs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tg-summary-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.tg-box-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.tg-profile-summary {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.tg-stat-block {
+  min-width: 0;
+}
+
+.tg-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tg-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold-border);
+}
+
+.tg-chip-good {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #a7f3d0;
+}
+
+.tg-chip-dir {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+}
+
+.tg-chip-low {
+  cursor: default;
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fecaca;
+}
+
+.tg-chip-low:hover {
+  transform: none;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.tg-bottom-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tg-dist-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tg-dist-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 22px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tg-dist-label {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+
+.tg-dist-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.tg-dist-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+}
+
+.tg-dist-fill.tg-dist-star-2,
+.tg-dist-fill.tg-dist-star-1 {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.tg-dist-fill.tg-dist-star-3 {
+  background: linear-gradient(90deg, #06b6d4, #22d3ee);
+}
+
+.tg-dist-count {
+  text-align: right;
+  color: var(--text-secondary);
+}
+
+.tg-recs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tg-see-all-btn {
+  background: transparent;
+  border: none;
+  color: var(--cyan-bright);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.tg-see-all-btn:hover {
+  text-decoration: underline;
+}
+
+.tg-recs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.tg-rec-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.tg-rec-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--gold-border);
+  transform: translateX(2px);
+}
+
+.tg-rec-rank {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  text-align: center;
+}
+
+.tg-rec-main {
+  min-width: 0;
+}
+
+.tg-rec-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tg-rec-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-rec-year {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tg-rec-reason {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.tg-rec-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.tg-rec-match {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--emerald-bright);
+  background: var(--emerald-soft);
+  border: 1px solid var(--emerald-border);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.tg-rec-prov {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--cyan-bright);
+}
+
+.tg-empty-hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.guide-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.guide-step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 13px 14px;
+}
+
+.guide-step-num {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--gold-bright);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 6px;
+}
+
+.guide-step-card h3 {
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+
+.guide-step-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.guide-step-card code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .taste-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-steps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .taste-guide-panel {
+    padding: 11px 12px;
+  }
+
+  .tg-bottom-split {
+    grid-template-columns: 1fr;
+  }
+
+  .tg-tab {
+    padding: 5px 9px;
+    font-size: 0.76rem;
+  }
+
+  .tg-summary-pill {
+    font-size: 0.7rem;
+    padding: 3px 8px;
+  }
+}
