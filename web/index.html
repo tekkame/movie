@@ -18,6 +18,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをGemini相談用にコピー">🧠 好みデータをコピー</button>
         <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
         <button id="auth-btn" class="btn btn-secondary" type="button">🔒 記録用ログイン</button>
       </div>
@@ -29,6 +30,16 @@
   </div>
 
   <main class="container">
+    <section class="presets-bar" aria-label="シーン別プリセットとガチャ">
+      <div class="presets-scroll">
+        <button type="button" class="preset-btn" data-preset="tonight_for_me">🔥 今すぐ観られる自分向け</button>
+        <button type="button" class="preset-btn" data-preset="weekday_short">⏱ 平日サクッと</button>
+        <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
+        <button type="button" class="preset-btn" data-preset="horror_thriller">👻 刺激的なホラー・スリラー</button>
+      </div>
+      <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
+    </section>
+
     <section class="filters-panel" aria-label="映画の絞り込み">
       <div class="filter-row">
         <div class="filter-group">
@@ -80,6 +91,15 @@
         </div>
 
         <div class="filter-group">
+          <label for="filter-runtime">上映時間</label>
+          <select id="filter-runtime">
+            <option value="">指定なし</option>
+            <option value="115">115分以下</option>
+            <option value="140">140分以下</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
           <label for="filter-watch">視聴ステータス</label>
           <select id="filter-watch">
             <option value="all">すべて</option>
@@ -101,6 +121,7 @@
         <div class="filter-group compact">
           <select id="filter-sort" aria-label="並び順">
             <option value="year_desc">新しい年順（各年ランク順）</option>
+            <option value="match_desc">自分マッチ度が高い順</option>
             <option value="score_desc">総合スコアが高い順</option>
             <option value="imdb_desc">観客評価（IMDb）が高い順</option>
             <option value="meta_desc">批評家評価（Metascore）が高い順</option>
@@ -124,6 +145,24 @@
   <!-- 映画詳細・視聴記録モーダル -->
   <dialog id="movie-modal" class="modal">
     <div id="modal-body" class="modal-body"></div>
+  </dialog>
+
+  <!-- 🎲 今夜の3本ガチャモーダル -->
+  <dialog id="gacha-modal" class="modal modal-gacha">
+    <div class="modal-body">
+      <div class="modal-header">
+        <div>
+          <h2>🎲 今夜の3本ガチャ</h2>
+          <p id="gacha-subtitle" class="gacha-subtitle"></p>
+        </div>
+        <button type="button" class="icon-close" data-close-modal="gacha-modal">✕</button>
+      </div>
+      <div id="gacha-results" class="gacha-results"></div>
+      <div class="gacha-footer">
+        <button id="gacha-reroll-btn" type="button" class="btn btn-primary">🎲 もう一度引く</button>
+        <button type="button" class="btn btn-secondary" data-close-modal="gacha-modal">閉じる</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- ログインモーダル（Supabase Magic Link） -->

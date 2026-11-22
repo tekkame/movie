@@ -549,18 +549,420 @@ textarea {
   margin-top: 12px;
 }
 
+/* ============================================================================
+   v2 追加スタイル: プリセットバー / ガチャ / マッチ度 / ワンタッチ評価バー / 印象チップ
+   ============================================================================ */
+
+.header-actions {
+  flex-wrap: wrap;
+}
+
+.presets-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.presets-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+}
+
+.preset-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.preset-btn:hover {
+  border-color: rgba(229, 169, 60, 0.55);
+  background: var(--surface-2);
+}
+
+.preset-btn.active {
+  background: var(--accent-soft);
+  color: #f6d58e;
+  border-color: var(--accent);
+}
+
+.gacha-trigger-btn {
+  white-space: nowrap;
+}
+
+.match-pill {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(14, 16, 21, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
+  font-weight: 700;
+  font-size: 0.74rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.metric-match {
+  background: var(--teal-soft);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.4);
+  font-weight: 700;
+}
+
+/* カード下部 ワンタッチ評価バー */
+.card-quick-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  background: rgba(14, 16, 21, 0.55);
+  border-top: 1px solid var(--border);
+  cursor: default;
+}
+
+.quick-status-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.quick-btn {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-btn:hover {
+  color: var(--text);
+  border-color: rgba(229, 169, 60, 0.45);
+}
+
+.quick-btn.active-watchlist {
+  background: var(--teal-soft);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.quick-btn.active-watched {
+  background: var(--green-soft);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.6);
+}
+
+.quick-stars-group {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.quick-star-btn {
+  background: var(--surface-2);
+  color: #64748b;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 30px;
+  padding: 0;
+  font-size: 0.92rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-star-btn:hover {
+  color: var(--accent);
+  border-color: rgba(229, 169, 60, 0.55);
+}
+
+.quick-star-btn.filled {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: rgba(229, 169, 60, 0.6);
+}
+
+/* 詳細モーダル内 印象チップ */
+.impression-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.impression-title {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.impression-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.impression-group-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.impression-label-positive {
+  color: #6ee7b7;
+}
+
+.impression-label-negative {
+  color: #fca5a5;
+}
+
+.impression-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.impression-chip {
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.impression-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.impression-chip.impression-positive.selected {
+  background: var(--green-soft);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.65);
+}
+
+.impression-chip.impression-negative.selected {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.6);
+}
+
+/* 🎲 今夜の3本ガチャモーダル */
+.modal-gacha {
+  width: min(820px, 95vw);
+}
+
+.gacha-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.gacha-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gacha-card {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 14px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.gacha-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.gacha-poster-fallback {
+  border-radius: 8px;
+}
+
+.gacha-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gacha-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gacha-title {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.gacha-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.gacha-summary {
+  margin: 2px 0 0;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gacha-actions {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.gacha-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* トースト通知 */
+.app-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 16px);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 999;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  max-width: 90vw;
+  text-align: center;
+}
+
+.app-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 @media (max-width: 640px) {
   .container {
-    padding: 14px;
+    padding: 12px;
+  }
+  .header-inner {
+    padding: 12px 14px;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .presets-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .presets-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .gacha-trigger-btn {
+    width: 100%;
   }
   .movies-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+  .card-body {
+    padding: 10px;
+    gap: 6px;
+  }
+  .card-title {
+    font-size: 0.9rem;
+  }
+  .card-quick-bar {
+    padding: 7px 6px 8px;
+    gap: 5px;
+  }
+  .quick-status-group {
+    gap: 4px;
+  }
+  .quick-btn {
+    font-size: 0.7rem;
+    padding: 4px 3px;
+    min-height: 32px;
+  }
+  .quick-stars-group {
+    gap: 3px;
+  }
+  .quick-star-btn {
+    min-height: 32px;
+    font-size: 0.86rem;
   }
   .modal-grid {
     grid-template-columns: 1fr;
   }
   .modal-poster {
     max-width: 160px;
+  }
+  .gacha-card {
+    grid-template-columns: 76px 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 390px) {
+  .quick-btn {
+    font-size: 0.66rem;
+    padding: 4px 2px;
+  }
+  .quick-star-btn {
+    font-size: 0.8rem;
   }
 }

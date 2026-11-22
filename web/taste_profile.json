@@ -1,0 +1,10 @@
+{
+  "critics_weight": 0.5,
+  "audience_weight": 0.4,
+  "awards_weight": 0.1,
+  "genre_weights": {},
+  "favorite_directors": [],
+  "preferred_decades": [],
+  "max_preferred_runtime": null,
+  "summary": "初期設定"
+}

@@ -68,12 +68,16 @@ CREATE TABLE IF NOT EXISTS public.omdb_cache (
 
 -- 3. 視聴ステータス・個人評価テーブル（フロントエンドから自分だけが更新）
 CREATE TABLE IF NOT EXISTS public.user_watch_status (
-  imdb_id     TEXT PRIMARY KEY REFERENCES public.movies(imdb_id) ON DELETE CASCADE,
-  status      TEXT NOT NULL DEFAULT 'unwatched' CHECK (status IN ('unwatched', 'watchlist', 'watched')),
-  my_rating   SMALLINT CHECK (my_rating IS NULL OR (my_rating >= 1 AND my_rating <= 5)),
-  memo        TEXT,
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  imdb_id         TEXT PRIMARY KEY REFERENCES public.movies(imdb_id) ON DELETE CASCADE,
+  status          TEXT NOT NULL DEFAULT 'unwatched' CHECK (status IN ('unwatched', 'watchlist', 'watched')),
+  my_rating       SMALLINT CHECK (my_rating IS NULL OR (my_rating >= 1 AND my_rating <= 5)),
+  impression_tags TEXT[] DEFAULT '{}',
+  memo            TEXT,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.user_watch_status
+  ADD COLUMN IF NOT EXISTS impression_tags TEXT[] DEFAULT '{}';
 
 -- ============================================================================
 -- Row Level Security (RLS) 設定
