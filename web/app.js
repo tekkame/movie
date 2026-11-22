@@ -227,7 +227,9 @@ const IMPRESSION_TAG_GROUPS = [
 
 const IMPRESSION_TAGS_CACHE_KEY = "core_cinema_impression_tags_cache";
 const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
-const TASTE_PANEL_COLLAPSED_KEY = "core_cinema_taste_panel_collapsed";
+const TASTE_PANEL_OPEN_KEY = "core_cinema_taste_panel_open_v3";
+const FILTER_PREFS_STORAGE_KEY = "core_cinema_filter_prefs_v3";
+const VIEW_MODE_STORAGE_KEY = "core_cinema_view_mode_v3";
 
 const state = {
   supabase: null,
@@ -243,7 +245,9 @@ const state = {
   isSyncingLocalToCloud: false,
   hasShownOfflineSaveHint: false,
   activeTasteTab: "taste", // "taste" | "guide"
-  isTastePanelCollapsed: false,
+  isTastePanelOpen: false,
+  viewMode: "card", // "card" | "list"
+  isMobileFiltersOpen: false,
 };
 
 function normalizeSupabaseUrl(url) {
@@ -642,26 +646,131 @@ function buildRecommendationReason(movie, userSignals) {
   return reasons.slice(0, 2).join(" ・ ") || "総合評価と好みプロファイルが高一致";
 }
 
-function setTastePanelCollapsed(collapsed) {
-  state.isTastePanelCollapsed = Boolean(collapsed);
+function setTastePanelOpen(open) {
+  state.isTastePanelOpen = Boolean(open);
   const panel = document.getElementById("taste-guide-panel");
   const toggleBtn = document.getElementById("toggle-taste-panel-btn");
-  const collapseBtn = document.getElementById("tg-collapse-btn");
   if (panel) {
-    panel.classList.toggle("is-collapsed", state.isTastePanelCollapsed);
+    panel.classList.toggle("hidden", !state.isTastePanelOpen);
   }
   if (toggleBtn) {
-    toggleBtn.setAttribute("aria-expanded", String(!state.isTastePanelCollapsed));
-    toggleBtn.classList.toggle("active", !state.isTastePanelCollapsed);
-  }
-  if (collapseBtn) {
-    collapseBtn.textContent = state.isTastePanelCollapsed ? "▼ 開く" : "▲ 閉じる";
+    toggleBtn.setAttribute("aria-expanded", String(state.isTastePanelOpen));
+    toggleBtn.classList.toggle("active", state.isTastePanelOpen);
   }
   try {
-    localStorage.setItem(TASTE_PANEL_COLLAPSED_KEY, state.isTastePanelCollapsed ? "1" : "0");
+    localStorage.setItem(TASTE_PANEL_OPEN_KEY, state.isTastePanelOpen ? "1" : "0");
   } catch {
     // ignore
   }
+}
+
+function saveFilterPrefs() {
+  const providerEl = document.getElementById("filter-provider");
+  const flatrateEl = document.getElementById("filter-flatrate-only");
+  if (!providerEl || !flatrateEl) return;
+  try {
+    localStorage.setItem(
+      FILTER_PREFS_STORAGE_KEY,
+      JSON.stringify({
+        provider: providerEl.value || "all",
+        flatrateOnly: Boolean(flatrateEl.checked),
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function restoreFilterPrefs() {
+  const providerEl = document.getElementById("filter-provider");
+  const flatrateEl = document.getElementById("filter-flatrate-only");
+  if (!providerEl || !flatrateEl) return;
+  try {
+    const raw = localStorage.getItem(FILTER_PREFS_STORAGE_KEY);
+    if (!raw) return;
+    const prefs = JSON.parse(raw);
+    if (prefs && typeof prefs === "object") {
+      if (typeof prefs.provider === "string") {
+        const hasOption = [...providerEl.options].some((o) => o.value === prefs.provider);
+        if (hasOption) providerEl.value = prefs.provider;
+      }
+      if (typeof prefs.flatrateOnly === "boolean") {
+        flatrateEl.checked = prefs.flatrateOnly;
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function clearFilterPrefs() {
+  try {
+    localStorage.removeItem(FILTER_PREFS_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function setViewMode(mode, { persist = true, rerender = false } = {}) {
+  state.viewMode = mode === "list" ? "list" : "card";
+  const cardBtn = document.getElementById("view-mode-card");
+  const listBtn = document.getElementById("view-mode-list");
+  if (cardBtn) {
+    const active = state.viewMode === "card";
+    cardBtn.classList.toggle("active", active);
+    cardBtn.setAttribute("aria-pressed", String(active));
+  }
+  if (listBtn) {
+    const active = state.viewMode === "list";
+    listBtn.classList.toggle("active", active);
+    listBtn.setAttribute("aria-pressed", String(active));
+  }
+  const grid = document.getElementById("movies-grid");
+  if (grid) {
+    grid.classList.toggle("is-list-mode", state.viewMode === "list");
+  }
+  if (persist) {
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, state.viewMode);
+    } catch {
+      // ignore
+    }
+  }
+  if (rerender) {
+    renderMovies();
+  }
+}
+
+function setMobileFiltersOpen(open) {
+  state.isMobileFiltersOpen = Boolean(open);
+  const collapsible = document.getElementById("filters-collapsible");
+  const btn = document.getElementById("toggle-filters-btn");
+  if (collapsible) {
+    collapsible.classList.toggle("is-open", state.isMobileFiltersOpen);
+  }
+  if (btn) {
+    btn.setAttribute("aria-expanded", String(state.isMobileFiltersOpen));
+    btn.classList.toggle("active", state.isMobileFiltersOpen);
+  }
+}
+
+function updateActiveFiltersBadge() {
+  const badge = document.getElementById("active-filters-badge");
+  if (!badge) return;
+  let count = 0;
+  if (document.getElementById("filter-decade")?.value !== "all") count += 1;
+  if (document.getElementById("filter-year")?.value !== "all") count += 1;
+  if (document.getElementById("filter-provider")?.value !== "all") count += 1;
+  if (document.getElementById("filter-slot")?.value !== "all") count += 1;
+  if (document.getElementById("filter-genre")?.value !== "all") count += 1;
+  if (document.getElementById("filter-runtime")?.value) count += 1;
+  if (document.getElementById("filter-watch")?.value !== "all") count += 1;
+  if (document.getElementById("filter-flatrate-only")?.checked) count += 1;
+  if (document.getElementById("filter-sort")?.value !== "year_desc") count += 1;
+  if (Array.isArray(state.presetGenres) && state.presetGenres.length > 0) count += 1;
+
+  badge.textContent = String(count);
+  badge.classList.toggle("hidden", count === 0);
 }
 
 function switchTasteTab(tabName) {
@@ -900,10 +1009,12 @@ function showToast(message, options = {}) {
 async function initApp() {
   await loadTasteProfile();
 
+  // v3: 好み分析パネルはデフォルトで非表示（ボタンを押したときだけ開く）
+  state.isTastePanelOpen = false;
   try {
-    state.isTastePanelCollapsed = localStorage.getItem(TASTE_PANEL_COLLAPSED_KEY) === "1";
+    state.viewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "list" ? "list" : "card";
   } catch {
-    state.isTastePanelCollapsed = false;
+    state.viewMode = "card";
   }
 
   const cfg = getConfig();
@@ -938,8 +1049,11 @@ async function initApp() {
 
   populateYearFilter();
   populateGenreFilter();
+  restoreFilterPrefs();
   updateAuthUI();
-  setTastePanelCollapsed(state.isTastePanelCollapsed);
+  setTastePanelOpen(false);
+  setViewMode(state.viewMode, { persist: false, rerender: false });
+  setMobileFiltersOpen(false);
   bindEvents();
   renderMovies();
 }
@@ -1151,15 +1265,17 @@ function populateGenreFilter() {
     merged.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
 }
 
-function resetAllFilterControls({ keepPreset = false } = {}) {
+function resetAllFilterControls({ keepPreset = false, preserveSavedPrefs = false } = {}) {
   document.getElementById("filter-decade").value = "all";
   document.getElementById("filter-year").value = "all";
-  document.getElementById("filter-provider").value = "all";
+  if (!preserveSavedPrefs) {
+    document.getElementById("filter-provider").value = "all";
+    document.getElementById("filter-flatrate-only").checked = false;
+  }
   document.getElementById("filter-slot").value = "all";
   document.getElementById("filter-genre").value = "all";
   document.getElementById("filter-runtime").value = "";
   document.getElementById("filter-watch").value = "all";
-  document.getElementById("filter-flatrate-only").checked = false;
   document.getElementById("filter-query").value = "";
   document.getElementById("filter-sort").value = "year_desc";
   if (!keepPreset) {
@@ -1185,12 +1301,12 @@ function updatePresetUI() {
 
 function applyPreset(presetName) {
   if (state.activePreset === presetName) {
-    resetAllFilterControls();
+    resetAllFilterControls({ preserveSavedPrefs: true });
     renderMovies();
     return;
   }
 
-  resetAllFilterControls({ keepPreset: true });
+  resetAllFilterControls({ keepPreset: true, preserveSavedPrefs: true });
   state.activePreset = presetName;
   state.presetGenres = null;
 
@@ -1310,7 +1426,7 @@ function renderMoodTags(tags, limit = null) {
     .join("")}</div>`;
 }
 
-function renderQuickBar(movie, watchEntry) {
+function renderQuickBar(movie, watchEntry, { compact = false } = {}) {
   const status = watchEntry?.status || "unwatched";
   const myRating = watchEntry?.my_rating != null ? Number(watchEntry.my_rating) : 0;
   const isWatchlist = status === "watchlist";
@@ -1324,16 +1440,55 @@ function renderQuickBar(movie, watchEntry) {
     .join("");
 
   return `
-    <div class="card-quick-bar" data-quick-bar="true">
+    <div class="card-quick-bar ${compact ? "is-compact" : ""}" data-quick-bar="true">
       <div class="quick-status-group">
-        <button type="button" class="quick-btn ${isWatchlist ? "active-watchlist" : ""}" data-quick-action="watchlist" data-imdb-id="${escapeHtml(movie.imdb_id)}" title="観たいリストをトグル">🔖 観たい</button>
-        <button type="button" class="quick-btn ${isWatched ? "active-watched" : ""}" data-quick-action="watched" data-imdb-id="${escapeHtml(movie.imdb_id)}" title="視聴済みをトグル">👁 観た</button>
+        <button type="button" class="quick-btn ${isWatchlist ? "active-watchlist" : ""}" data-quick-action="watchlist" data-imdb-id="${escapeHtml(movie.imdb_id)}" title="観たいリストをトグル">🔖${compact ? "" : " 観たい"}</button>
+        <button type="button" class="quick-btn ${isWatched ? "active-watched" : ""}" data-quick-action="watched" data-imdb-id="${escapeHtml(movie.imdb_id)}" title="視聴済みをトグル">👁${compact ? "" : " 観た"}</button>
       </div>
       <div class="quick-stars-group" role="group" aria-label="ワンタッチ星評価">
         ${starsHtml}
       </div>
     </div>
   `;
+}
+
+function renderYearTabsBar() {
+  const bar = document.getElementById("year-tabs-bar");
+  if (!bar) return;
+
+  const yearStats = new Map();
+  let totalMovies = 0;
+  let totalWatched = 0;
+
+  for (const m of state.movies) {
+    const yr = m.release_year;
+    if (!yr) continue;
+    totalMovies += 1;
+    const w = state.watchMap[m.imdb_id];
+    const isWatched = Boolean(w && (w.status === "watched" || w.my_rating != null));
+    if (isWatched) totalWatched += 1;
+
+    if (!yearStats.has(yr)) {
+      yearStats.set(yr, { total: 0, watched: 0 });
+    }
+    const st = yearStats.get(yr);
+    st.total += 1;
+    if (isWatched) st.watched += 1;
+  }
+
+  const years = [...yearStats.keys()].sort((a, b) => b - a);
+  const activeYear = document.getElementById("filter-year")?.value || "all";
+
+  const tabsHtml = [
+    `<button type="button" class="year-tab ${activeYear === "all" ? "active" : ""}" data-year-tab="all" aria-pressed="${activeYear === "all"}">すべて <span class="year-tab-count">(${totalWatched}/${totalMovies})</span></button>`,
+    ...years.map((yr) => {
+      const st = yearStats.get(yr);
+      const isActive = activeYear === String(yr);
+      return `<button type="button" class="year-tab ${isActive ? "active" : ""}" data-year-tab="${yr}" aria-pressed="${isActive}">${yr} <span class="year-tab-count">(${st.watched}/${st.total})</span></button>`;
+    }),
+  ].join("");
+
+  bar.innerHTML = tabsHtml;
 }
 
 function updateWatchStatsSummary() {
@@ -1355,15 +1510,65 @@ function updateWatchStatsSummary() {
   `;
 }
 
+function renderListRow(m) {
+  const w = state.watchMap[m.imdb_id];
+  const isWatched = w?.status === "watched";
+  const isWatchlist = w?.status === "watchlist";
+  const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
+  const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
+  const isHighMatch = matchScore >= 85;
+  const rowClasses = [
+    "movie-list-row",
+    isWatched ? "is-watched" : "",
+    isWatchlist ? "is-watchlist" : "",
+    isHighMatch ? "is-high-match" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `
+    <article class="${rowClasses}" data-imdb-id="${escapeHtml(m.imdb_id)}">
+      <div class="list-thumb-wrap">
+        ${
+          m.poster_url
+            ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
+            : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
+        }
+      </div>
+      <div class="list-main">
+        <div class="list-meta-line">
+          <span class="list-year-rank">${m.release_year} · #${m.year_rank}</span>
+          <span class="list-match-chip">マッチ ${matchScore}%</span>
+          ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
+        </div>
+        <h2 class="list-title">${escapeHtml(m.title_ja)}</h2>
+        <div class="list-sub">${escapeHtml(m.title_en)}${m.runtime_minutes ? ` · ${m.runtime_minutes}分` : ""} · 総合 ${Number(m.composite_score).toFixed(1)}</div>
+      </div>
+      <div class="list-quick-col">
+        ${renderQuickBar(m, w, { compact: true })}
+      </div>
+    </article>
+  `;
+}
+
 function renderMovies() {
   const list = getFilteredMovies();
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
   updateWatchStatsSummary();
+  updateActiveFiltersBadge();
+  renderYearTabsBar();
   renderTasteAnalyticsDashboard();
+
+  grid.classList.toggle("is-list-mode", state.viewMode === "list");
 
   if (list.length === 0) {
     grid.innerHTML = `<p class="empty-state">条件に一致する映画がありません。フィルタを緩めてお試しください。</p>`;
+    return;
+  }
+
+  if (state.viewMode === "list") {
+    grid.innerHTML = list.map(renderListRow).join("");
     return;
   }
 
@@ -1639,7 +1844,19 @@ function openMovieModal(imdbId) {
               ${(jp.rent || []).map((p) => `<span class="badge badge-rent">レンタル: ${escapeHtml(p)}</span>`).join("")}
               ${!jp.flatrate?.length && !jp.rent?.length ? `<span class="badge badge-muted">現在配信情報なし</span>` : ""}
             </div>
-            ${jp.link ? `<p style="margin:8px 0 0;font-size:0.82rem"><a href="${escapeHtml(jp.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan-bright)">配信ページ（TMDB/JustWatch）を開く ↗</a></p>` : ""}
+          </div>
+
+          <div class="detail-section">
+            <h3>外部リンク（新規タブ）</h3>
+            <div class="external-links-row">
+              <a class="ext-link-btn ext-link-yt" href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${m.title_ja} 映画 予告`)}" target="_blank" rel="noopener noreferrer">▶ 予告編（YouTube検索）</a>
+              <a class="ext-link-btn ext-link-filmarks" href="https://filmarks.com/search/movies?q=${encodeURIComponent(m.title_ja)}" target="_blank" rel="noopener noreferrer">📝 Filmarksで評判を見る</a>
+              ${
+                jp.link
+                  ? `<a class="ext-link-btn ext-link-stream" href="${escapeHtml(jp.link)}" target="_blank" rel="noopener noreferrer">🎬 配信先を開く</a>`
+                  : ""
+              }
+            </div>
           </div>
         </div>
       </div>
@@ -1903,6 +2120,9 @@ function bindEvents() {
   ].forEach((id) => {
     document.getElementById(id).addEventListener("change", () => {
       clearActivePreset();
+      if (id === "filter-provider" || id === "filter-flatrate-only") {
+        saveFilterPrefs();
+      }
       renderMovies();
     });
   });
@@ -1913,8 +2133,39 @@ function bindEvents() {
   });
 
   document.getElementById("reset-filters-btn").addEventListener("click", () => {
+    clearFilterPrefs();
     resetAllFilterControls();
     renderMovies();
+  });
+
+  const toggleFiltersBtn = document.getElementById("toggle-filters-btn");
+  if (toggleFiltersBtn) {
+    toggleFiltersBtn.addEventListener("click", () => {
+      setMobileFiltersOpen(!state.isMobileFiltersOpen);
+    });
+  }
+
+  const yearTabsBar = document.getElementById("year-tabs-bar");
+  if (yearTabsBar) {
+    yearTabsBar.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-year-tab]");
+      if (!tab) return;
+      const yearVal = tab.dataset.yearTab;
+      clearActivePreset();
+      document.getElementById("filter-decade").value = "all";
+      document.getElementById("filter-year").value = yearVal;
+      renderMovies();
+      const activeBtn = yearTabsBar.querySelector(`[data-year-tab="${CSS.escape(yearVal)}"]`);
+      if (activeBtn && typeof activeBtn.scrollIntoView === "function") {
+        activeBtn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    });
+  }
+
+  document.querySelectorAll(".view-mode-btn[data-view-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setViewMode(btn.dataset.viewMode, { persist: true, rerender: true });
+    });
   });
 
   document.querySelectorAll(".preset-btn[data-preset]").forEach((btn) => {
@@ -1930,21 +2181,21 @@ function bindEvents() {
   const toggleTasteBtn = document.getElementById("toggle-taste-panel-btn");
   if (toggleTasteBtn) {
     toggleTasteBtn.addEventListener("click", () => {
-      setTastePanelCollapsed(!state.isTastePanelCollapsed);
+      setTastePanelOpen(!state.isTastePanelOpen);
     });
   }
 
   const collapseBtn = document.getElementById("tg-collapse-btn");
   if (collapseBtn) {
     collapseBtn.addEventListener("click", () => {
-      setTastePanelCollapsed(!state.isTastePanelCollapsed);
+      setTastePanelOpen(false);
     });
   }
 
   document.querySelectorAll(".tg-tab[data-tg-tab]").forEach((tabBtn) => {
     tabBtn.addEventListener("click", () => {
-      if (state.isTastePanelCollapsed) {
-        setTastePanelCollapsed(false);
+      if (!state.isTastePanelOpen) {
+        setTastePanelOpen(true);
       }
       switchTasteTab(tabBtn.dataset.tgTab);
     });
@@ -1961,7 +2212,7 @@ function bindEvents() {
 
       const genreBtn = e.target.closest("[data-filter-genre]");
       if (genreBtn) {
-        resetAllFilterControls();
+        resetAllFilterControls({ preserveSavedPrefs: true });
         document.getElementById("filter-genre").value = genreBtn.dataset.filterGenre;
         document.getElementById("filter-sort").value = "match_desc";
         renderMovies();
@@ -1970,7 +2221,7 @@ function bindEvents() {
 
       const queryBtn = e.target.closest("[data-filter-query]");
       if (queryBtn) {
-        resetAllFilterControls();
+        resetAllFilterControls({ preserveSavedPrefs: true });
         document.getElementById("filter-query").value = queryBtn.dataset.filterQuery;
         renderMovies();
         return;
@@ -2012,7 +2263,7 @@ function bindEvents() {
       return;
     }
 
-    const card = e.target.closest(".movie-card");
+    const card = e.target.closest(".movie-card, .movie-list-row");
     if (card) openMovieModal(card.dataset.imdbId);
   });
 

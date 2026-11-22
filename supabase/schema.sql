@@ -81,8 +81,8 @@ ALTER TABLE public.user_watch_status
 
 -- ============================================================================
 -- Row Level Security (RLS) 設定
--- ・閲覧: ログイン不要で誰でも可能（URL限定公開の個人サイト向け）
--- ・書き込み: 指定したオーナーのメールアドレスでログイン時のみ許可
+-- ・movies 閲覧: ログイン不要で誰でも可能（URL限定公開の個人サイト向け）
+-- ・user_watch_status 読み書き: 指定したオーナーのメールアドレスでログイン時のみ許可
 -- ============================================================================
 
 ALTER TABLE public.movies ENABLE ROW LEVEL SECURITY;
@@ -99,13 +99,9 @@ CREATE POLICY "movies_public_read"
 
 -- omdb_cache: service_roleのみ利用（RLS有効・ポリシーなし＝外部非公開）
 
--- user_watch_status: 閲覧はオープン、書き込みはオーナー1アカウントのみ
+-- user_watch_status: オーナー本人のみ読み書き可
 DROP POLICY IF EXISTS "watch_status_public_read" ON public.user_watch_status;
-CREATE POLICY "watch_status_public_read"
-  ON public.user_watch_status
-  FOR SELECT
-  TO anon, authenticated
-  USING (true);
+DROP POLICY IF EXISTS "watch_status_public_select" ON public.user_watch_status;
 
 -- ▼▼▼ ここをご自身のメールアドレスに変更してください ▼▼▼
 DROP POLICY IF EXISTS "watch_status_owner_write" ON public.user_watch_status;
@@ -113,10 +109,10 @@ CREATE POLICY "watch_status_owner_write"
   ON public.user_watch_status
   FOR ALL
   TO authenticated
-  USING (LOWER(auth.jwt() ->> 'email') = LOWER('tekkame@gmail.com'))
-  WITH CHECK (LOWER(auth.jwt() ->> 'email') = LOWER('tekkame@gmail.com'));
+  USING (LOWER(auth.jwt() ->> 'email') = LOWER('YOUR_EMAIL@example.com'))
+  WITH CHECK (LOWER(auth.jwt() ->> 'email') = LOWER('YOUR_EMAIL@example.com'));
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT SELECT ON public.movies TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_watch_status TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_watch_status TO authenticated;
 GRANT ALL ON public.movies, public.omdb_cache, public.user_watch_status TO service_role;
