@@ -1,0 +1,58 @@
+name: Sync Core Cinema Archive
+
+on:
+  schedule:
+    # 毎週日曜 03:00 JST (= 土曜 18:00 UTC) に実行
+    # ・直近2年のランキング更新＋全収録作品の日本配信状況を最新化
+    # ・Supabase無料枠の7日間非アクティブ停止も自動で防止
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "実行モード（weekly: 週次更新 / backfill: 1980年〜全件初回構築）"
+        required: true
+        default: "weekly"
+        type: choice
+        options:
+          - weekly
+          - backfill
+      max_omdb_calls:
+        description: "OMDb API の最大コール数（無料枠は1日1,000件）"
+        required: false
+        default: "900"
+        type: string
+      include_animation:
+        description: "アニメ映画を選出対象に含める（デフォルト: true）"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Run movie sync pipeline
+        env:
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'weekly' }}"
+          MAX_CALLS="${{ github.event.inputs.max_omdb_calls || '900' }}"
+          ANIM_FLAG="--include-animation"
+          if [ "${{ github.event.inputs.include_animation }}" = "false" ]; then
+            ANIM_FLAG="--exclude-animation"
+          fi
+          python pipeline/fetch_and_sync.py --mode "$MODE" --max-omdb-calls "$MAX_CALLS" "$ANIM_FLAG"

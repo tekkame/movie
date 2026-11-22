@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Core Cinema Archive｜年別・本当に面白い映画データベース</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-mark">🎬</span>
+        <div>
+          <h1>Core Cinema Archive</h1>
+          <p class="subtitle">1980年〜現在｜批評家 × 観客 × 映画賞 ＋ ジャンル代表枠で自動抽出</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
+        <button id="auth-btn" class="btn btn-secondary" type="button">🔒 記録用ログイン</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="demo-banner" class="demo-banner hidden">
+    <span><strong>デモ表示中：</strong><code>web/config.js</code> にSupabaseのURLとキーを設定すると、自動収集された全年代データが表示されます。</span>
+  </div>
+
+  <main class="container">
+    <section class="filters-panel" aria-label="映画の絞り込み">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label for="filter-decade">年代</label>
+          <select id="filter-decade">
+            <option value="all">すべての年代（1980〜）</option>
+            <option value="2020s">2020年代</option>
+            <option value="2010s">2010年代</option>
+            <option value="2000s">2000年代</option>
+            <option value="1990s">1990年代</option>
+            <option value="1980s">1980年代</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-year">公開年</label>
+          <select id="filter-year">
+            <option value="all">すべての年</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-provider">配信サービス（日本）</label>
+          <select id="filter-provider">
+            <option value="all">指定なし</option>
+            <option value="U-NEXT">U-NEXT</option>
+            <option value="Amazon Prime Video">Amazon Prime Video</option>
+            <option value="Netflix">Netflix</option>
+            <option value="Disney Plus">Disney+</option>
+            <option value="Hulu">Hulu</option>
+            <option value="Apple TV">Apple TV</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-slot">選出枠</label>
+          <select id="filter-slot">
+            <option value="all">すべて（各年20本）</option>
+            <option value="top12">総合TOP12</option>
+            <option value="genre_pick">ジャンル・非英語圏代表枠</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-genre">ジャンル</label>
+          <select id="filter-genre">
+            <option value="all">すべてのジャンル</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-watch">視聴ステータス</label>
+          <select id="filter-watch">
+            <option value="all">すべて</option>
+            <option value="unwatched">未視聴のみ</option>
+            <option value="watchlist">観たいリスト</option>
+            <option value="watched">視聴済み</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="filter-row filter-row-secondary">
+        <div class="search-wrap">
+          <input id="filter-query" type="search" placeholder="邦題・原題・監督名・タグで検索..." />
+        </div>
+        <label class="checkbox-label">
+          <input id="filter-flatrate-only" type="checkbox" />
+          <span>見放題のみに絞る</span>
+        </label>
+        <div class="filter-group compact">
+          <select id="filter-sort" aria-label="並び順">
+            <option value="year_desc">新しい年順（各年ランク順）</option>
+            <option value="score_desc">総合スコアが高い順</option>
+            <option value="imdb_desc">観客評価（IMDb）が高い順</option>
+            <option value="meta_desc">批評家評価（Metascore）が高い順</option>
+          </select>
+        </div>
+        <button id="reset-filters-btn" class="btn btn-ghost" type="button">条件リセット</button>
+      </div>
+    </section>
+
+    <div class="results-bar">
+      <div id="results-count" class="results-count">読み込み中...</div>
+      <div class="legend">
+        <span class="legend-item"><span class="dot dot-top"></span>総合TOP12</span>
+        <span class="legend-item"><span class="dot dot-genre"></span>ジャンル代表枠</span>
+      </div>
+    </div>
+
+    <section id="movies-grid" class="movies-grid" aria-live="polite"></section>
+  </main>
+
+  <!-- 映画詳細・視聴記録モーダル -->
+  <dialog id="movie-modal" class="modal">
+    <div id="modal-body" class="modal-body"></div>
+  </dialog>
+
+  <!-- ログインモーダル（Supabase Magic Link） -->
+  <dialog id="auth-modal" class="modal modal-sm">
+    <form id="auth-form" class="auth-form">
+      <div class="modal-header">
+        <h2>記録用ログイン</h2>
+        <button type="button" class="icon-close" data-close-modal="auth-modal">✕</button>
+      </div>
+      <p class="auth-note">視聴ステータス・評価の保存はオーナーのメールアドレスのみ許可されています。ログイン用リンクをメールで送信します。</p>
+      <label for="auth-email">メールアドレス</label>
+      <input id="auth-email" type="email" required placeholder="you@example.com" />
+      <div class="auth-actions">
+        <button type="submit" class="btn btn-primary">ログインリンクを送信</button>
+      </div>
+      <p id="auth-message" class="auth-message"></p>
+    </form>
+  </dialog>
+
+  <script src="./config.example.js"></script>
+  <script src="./config.js" onerror="/* config.js未配置時はデモモードで動作 */"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

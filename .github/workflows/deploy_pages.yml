@@ -1,0 +1,58 @@
+name: Deploy Core Cinema Archive to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy_pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build_and_deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate web/config.js from GitHub Secrets or Variables
+        env:
+          CFG_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          CFG_ANON: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const url = process.env.CFG_URL || "";
+            const key = process.env.CFG_ANON || "";
+            const content = `window.CORE_CINEMA_CONFIG = ${JSON.stringify(
+              { SUPABASE_URL: url, SUPABASE_ANON_KEY: key },
+              null,
+              2
+            )};\n`;
+            fs.writeFileSync("web/config.js", content, "utf8");
+          '
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./web"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
