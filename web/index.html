@@ -22,7 +22,8 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">🧠 好みコピー</button>
+        <button id="toggle-taste-panel-btn" class="btn btn-secondary" type="button" aria-expanded="false" aria-controls="taste-guide-panel">🧠 好み分析・使い方</button>
+        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">📋 好みコピー</button>
         <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
         <button id="auth-btn" class="btn btn-secondary" type="button">🔒 ログイン</button>
       </div>
@@ -34,6 +35,44 @@
   </div>
 
   <main class="container">
+    <!-- 🧠 あなたの好み分析 & 📖 使い方ガイド ダッシュボード -->
+    <section id="taste-guide-panel" class="taste-guide-panel" aria-label="あなたの好み分析と使い方ガイド">
+      <div class="tg-header">
+        <div class="tg-tabs" role="tablist" aria-label="パネル切り替え">
+          <button type="button" class="tg-tab active" data-tg-tab="taste" role="tab" aria-selected="true">🧠 あなたの好み分析</button>
+          <button type="button" class="tg-tab" data-tg-tab="guide" role="tab" aria-selected="false">📖 使い方ガイド</button>
+        </div>
+        <div class="tg-header-right">
+          <span id="tg-summary-pill" class="tg-summary-pill">読み込み中...</span>
+          <button id="tg-collapse-btn" type="button" class="btn btn-ghost tg-collapse-btn" aria-label="パネルを折りたたむ">▲ 閉じる</button>
+        </div>
+      </div>
+
+      <div id="tg-body-taste" class="tg-body" role="tabpanel">
+        <div id="taste-analytics-content" class="taste-analytics-grid"></div>
+      </div>
+
+      <div id="tg-body-guide" class="tg-body hidden" role="tabpanel">
+        <div class="guide-steps-grid">
+          <article class="guide-step-card">
+            <div class="guide-step-num">STEP 1</div>
+            <h3>ワンタップで「観た / ★1〜5」を記録</h3>
+            <p>各映画カード下部の <code>🔖 観たい</code> <code>👁 観た</code> や <code>★1〜★5</code> を押すだけで即保存。評価が増えるほど <strong>自分マッチ度（0〜100%）</strong> がリアルタイムに賢く進化します。</p>
+          </article>
+          <article class="guide-step-card">
+            <div class="guide-step-num">STEP 2</div>
+            <h3>プリセット &amp; ガチャで今夜の1本を即決</h3>
+            <p><code>🔥 今すぐ観られる自分向け</code> や <code>⏱ 平日サクッと</code> を選び、迷ったら <code>🎲 今夜の3本ガチャ</code> を回せば現在の絞り込み上位20本から即座に3本を提案します。</p>
+          </article>
+          <article class="guide-step-card">
+            <div class="guide-step-num">STEP 3</div>
+            <h3>印象チップ &amp; 好みコピーで深掘り</h3>
+            <p>カードをクリックすると「良かった点・合わなかった点」チップや感想メモを残せます。<code>📋 好みコピー</code> を使えば、あなたの評価履歴をそのままAI相談用プロンプトとして出力できます。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="presets-bar" aria-label="シーン別プリセットとガチャ">
       <div class="presets-scroll">
         <button type="button" class="preset-btn" data-preset="tonight_for_me">🔥 今すぐ観られる自分向け</button>

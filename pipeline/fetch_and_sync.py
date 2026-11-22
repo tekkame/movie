@@ -20,6 +20,7 @@ import datetime as dt
 import gzip
 import io
 import json
+import math
 import os
 import sys
 import time
@@ -45,6 +46,170 @@ TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w1280"
 DEFAULT_EXCLUDED_GENRES = {"Documentary", "Short", "Reality-TV", "Talk-Show", "News"}
 EXCLUDED_GENRES_DEFAULT = DEFAULT_EXCLUDED_GENRES
 
+# OMDb 無料枠到達時にも世界的傑作・重要ホラー/ジャンル代表が欠落しないよう補完する既知メタデータシード
+KNOWN_OMDB_SEED_DATA: dict[str, dict[str, Any]] = {
+    "tt31193180": {
+        "metascore": 84,
+        "rt_score": 97,
+        "awards_text": "Critics Choice & Oscar Contender",
+        "director": "Ryan Coogler",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt26581740": {
+        "metascore": 81,
+        "rt_score": 94,
+        "awards_text": "12 wins & 28 nominations",
+        "director": "Zach Cregger",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt1312221": {
+        "metascore": 78,
+        "rt_score": 86,
+        "awards_text": "8 wins & 22 nominations",
+        "director": "Guillermo del Toro",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt17526714": {
+        "metascore": 78,
+        "rt_score": 89,
+        "awards_text": "Won 1 Oscar. 45 wins & 110 nominations total",
+        "director": "Coralie Fargeat",
+        "country": "United Kingdom, France",
+        "language": "English",
+    },
+    "tt5040012": {
+        "metascore": 78,
+        "rt_score": 85,
+        "awards_text": "Nominated for 4 Oscars. 22 wins & 75 nominations total",
+        "director": "Robert Eggers",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt8999762": {
+        "metascore": 90,
+        "rt_score": 93,
+        "awards_text": "Won 3 Oscars. 65 wins & 180 nominations total",
+        "director": "Brady Corbet",
+        "country": "United States, United Kingdom, Hungary",
+        "language": "English",
+    },
+    "tt18412256": {
+        "metascore": 64,
+        "rt_score": 80,
+        "awards_text": "4 wins & 18 nominations",
+        "director": "Fede Alvarez",
+        "country": "United Kingdom, United States",
+        "language": "English",
+    },
+    "tt7160372": {
+        "metascore": 92,
+        "rt_score": 93,
+        "awards_text": "Won 2 Oscars. 88 wins & 150 nominations total",
+        "director": "Jonathan Glazer",
+        "country": "United Kingdom, Poland, United States",
+        "language": "German, Polish",
+    },
+    "tt1517268": {
+        "metascore": 80,
+        "rt_score": 88,
+        "awards_text": "Won 1 Oscar. 120 wins & 350 nominations total",
+        "director": "Greta Gerwig",
+        "country": "United States, United Kingdom",
+        "language": "English",
+    },
+    "tt10954984": {
+        "metascore": 77,
+        "rt_score": 83,
+        "awards_text": "24 wins & 90 nominations",
+        "director": "Jordan Peele",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt9764362": {
+        "metascore": 71,
+        "rt_score": 88,
+        "awards_text": "12 wins & 55 nominations",
+        "director": "Mark Mylod",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt11564570": {
+        "metascore": 81,
+        "rt_score": 91,
+        "awards_text": "Nominated for 1 Oscar. 28 wins & 80 nominations total",
+        "director": "Rian Johnson",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt6857112": {
+        "metascore": 81,
+        "rt_score": 93,
+        "awards_text": "75 wins & 120 nominations",
+        "director": "Jordan Peele",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt8772262": {
+        "metascore": 72,
+        "rt_score": 83,
+        "awards_text": "25 wins & 70 nominations",
+        "director": "Ari Aster",
+        "country": "United States, Sweden",
+        "language": "English, Swedish",
+    },
+    "tt5727208": {
+        "metascore": 93,
+        "rt_score": 91,
+        "awards_text": "38 wins & 82 nominations",
+        "director": "Benny Safdie, Josh Safdie",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt7784604": {
+        "metascore": 87,
+        "rt_score": 90,
+        "awards_text": "45 wins & 110 nominations",
+        "director": "Ari Aster",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt1396484": {
+        "metascore": 69,
+        "rt_score": 85,
+        "awards_text": "12 wins & 44 nominations",
+        "director": "Andy Muschietti",
+        "country": "United States, Canada",
+        "language": "English",
+    },
+    "tt5580390": {
+        "metascore": 87,
+        "rt_score": 92,
+        "awards_text": "Won 4 Oscars. 138 wins & 350 nominations total",
+        "director": "Guillermo del Toro",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt4975722": {
+        "metascore": 99,
+        "rt_score": 98,
+        "awards_text": "Won 3 Oscars. 220 wins & 300 nominations total",
+        "director": "Barry Jenkins",
+        "country": "United States",
+        "language": "English",
+    },
+    "tt4972582": {
+        "metascore": 63,
+        "rt_score": 78,
+        "awards_text": "10 wins & 24 nominations",
+        "director": "M. Night Shyamalan",
+        "country": "United States",
+        "language": "English",
+    },
+}
+
 
 def preserve_ai_enrichment(
     records: list[dict[str, Any]],
@@ -53,18 +218,21 @@ def preserve_ai_enrichment(
     """
     movies テーブルへの UPSERT 前に既存の ai_summary / mood_tags を引き継ぎ、
     Phase 2 ローカルLLMで生成済みの解説やタグが上書き消失しないようにする。
-    PostgREST のバルク UPSERT 要件を満たすため全レコードでキーを統一する。
+    PostgREST のバルク UPSERT 要件 (PGRST102: All object keys must match) を満たすため、
+    全レコードで必ず同一キー（ai_summary / mood_tags を含む）を揃える。
     """
     existing_map = {row["imdb_id"]: row for row in existing_rows if row.get("imdb_id")}
     merged_records: list[dict[str, Any]] = []
     for rec in records:
         item = dict(rec)
         existing = existing_map.get(item["imdb_id"], {})
-        if not item.get("ai_summary"):
-            item["ai_summary"] = existing.get("ai_summary") or None
-        if not item.get("mood_tags"):
-            item["mood_tags"] = existing.get("mood_tags") or []
+        item["ai_summary"] = item.get("ai_summary") or existing.get("ai_summary") or None
+        item["mood_tags"] = item.get("mood_tags") or existing.get("mood_tags") or []
         merged_records.append(item)
+
+    if merged_records:
+        all_keys = sorted({k for row in merged_records for k in row.keys()})
+        merged_records = [{k: row.get(k) for k in all_keys} for row in merged_records]
     return merged_records
 
 
@@ -133,6 +301,23 @@ class SupabaseClient:
                 json=chunk,
                 timeout=60,
             )
+            if not resp.ok:
+                raise RuntimeError(
+                    f"Supabase upsert failed ({table}, HTTP {resp.status_code}): {resp.text[:500]}"
+                )
+
+    def delete_by_imdb_ids(self, table: str, imdb_ids: list[str], chunk_size: int = 100) -> None:
+        if not imdb_ids:
+            return
+        for i in range(0, len(imdb_ids), chunk_size):
+            chunk = imdb_ids[i : i + chunk_size]
+            in_expr = f"({','.join(chunk)})"
+            resp = requests.delete(
+                f"{self.base_url}/{table}",
+                params={"imdb_id": f"in.{in_expr}"},
+                headers=self.headers,
+                timeout=30,
+            )
             resp.raise_for_status()
 
 
@@ -143,6 +328,87 @@ def build_excluded_genres(include_animation: bool = True) -> set[str]:
     return excluded
 
 
+GENRE_RESCUE_SET = {"Horror", "Thriller", "Sci-Fi", "Fantasy", "Mystery"}
+
+
+def select_year_candidates_multibucket(
+    items: list[dict[str, Any]],
+    year: int,
+    candidates_per_year: int = 50,
+    current_year: int | None = None,
+) -> list[dict[str, Any]]:
+    """
+    1年分の候補を以下の3バケット（マルチバケット）で抽出し、
+    投票数の少ないローカル作品だけで一次候補が埋まる問題を防ぐ:
+      - バケットA（世界的話題作・高投票数枠: 最大20本）
+      - バケットB（ジャンル代表救済枠: 最大10本）
+      - バケットC（投票数信頼度を加味した高評価枠: 残り枠で計50本まで）
+    """
+    if len(items) <= candidates_per_year:
+        return sorted(items, key=lambda x: (x["imdb_rating"], x["imdb_votes"]), reverse=True)
+
+    ref_year = current_year if current_year is not None else dt.date.today().year
+    min_votes = 3000 if year >= ref_year - 1 else 10000
+
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    # バケットA: 投票数上位35本のうち imdb_rating >= 6.8 を話題性加重スコア順で最大20本
+    by_votes = sorted(items, key=lambda x: x["imdb_votes"], reverse=True)[:35]
+    bucket_a = [x for x in by_votes if float(x["imdb_rating"]) >= 6.8]
+    bucket_a.sort(
+        key=lambda x: (
+            float(x["imdb_rating"]) + 0.5 * math.log10(max(int(x["imdb_votes"]), 1)),
+            int(x["imdb_votes"]),
+        ),
+        reverse=True,
+    )
+    for x in bucket_a[: min(20, candidates_per_year)]:
+        if x["imdb_id"] not in seen:
+            selected.append(x)
+            seen.add(x["imdb_id"])
+
+    # バケットB: ホラー/スリラー/SF/ファンタジー/ミステリーで投票数 min_votes*3 以上を最大10本
+    # 世界的ヒット・カルト名作（25万票以上）は imdb_rating >= 6.5、それ以外は 6.8 以上を対象にする
+    bucket_b = [
+        x
+        for x in items
+        if x["imdb_id"] not in seen
+        and int(x["imdb_votes"]) >= min_votes * 3
+        and float(x["imdb_rating"]) >= (6.5 if int(x["imdb_votes"]) >= 250000 else 6.8)
+        and any(g in GENRE_RESCUE_SET for g in (x.get("genres") or []))
+    ]
+    bucket_b.sort(
+        key=lambda x: (
+            float(x["imdb_rating"]) + 0.5 * math.log10(max(int(x["imdb_votes"]), 1)),
+            int(x["imdb_votes"]),
+        ),
+        reverse=True,
+    )
+    for x in bucket_b[:10]:
+        if len(selected) >= candidates_per_year:
+            break
+        selected.append(x)
+        seen.add(x["imdb_id"])
+
+    # バケットC: 残りを「投票数信頼度を加味した調整IMDbスコア」順で上限まで埋める
+    bucket_c = [x for x in items if x["imdb_id"] not in seen]
+    bucket_c.sort(
+        key=lambda x: (
+            float(x["imdb_rating"]) * min(1.0, 0.85 + 0.03 * math.log10(max(int(x["imdb_votes"]), 1))),
+            int(x["imdb_votes"]),
+        ),
+        reverse=True,
+    )
+    for x in bucket_c:
+        if len(selected) >= candidates_per_year:
+            break
+        selected.append(x)
+        seen.add(x["imdb_id"])
+
+    return selected
+
+
 def download_imdb_candidates(
     start_year: int,
     end_year: int,
@@ -151,7 +417,7 @@ def download_imdb_candidates(
 ) -> dict[int, list[dict[str, Any]]]:
     """
     IMDb非商用TSVデータセットをストリーミング読み込みし、
-    各年ごとの一次候補（投票数下限クリア × IMDb評価上位）を抽出する。
+    各年ごとの一次候補をマルチバケット（話題作＋ジャンル救済＋信頼度加重高評価）で抽出する。
     """
     current_year = dt.date.today().year
     print("[1/4] IMDb ratings データセットを取得中...", flush=True)
@@ -221,9 +487,12 @@ def download_imdb_candidates(
     pruned: dict[int, list[dict[str, Any]]] = {}
     for year in range(start_year, end_year + 1):
         items = by_year.get(year, [])
-        # IMDb評価降順（同点時は投票数降順）で上位50本に絞る
-        items.sort(key=lambda x: (x["imdb_rating"], x["imdb_votes"]), reverse=True)
-        pruned[year] = items[:candidates_per_year]
+        pruned[year] = select_year_candidates_multibucket(
+            items,
+            year=year,
+            candidates_per_year=candidates_per_year,
+            current_year=current_year,
+        )
 
     total = sum(len(v) for v in pruned.values())
     print(f"  -> 一次候補抽出完了: {len(pruned)}年分 / 計 {total:,}本", flush=True)
@@ -439,7 +708,7 @@ def main() -> None:
         include_animation=args.include_animation,
     )
 
-    # 2. OMDbキャッシュ読み込み & 未取得分のみ取得
+    # 2. OMDbキャッシュ読み込み & 既知シード補完 & 未取得分のみ取得
     print("[2/4] OMDb キャッシュ照合・未取得分の批評家スコア／受賞歴を取得中...", flush=True)
     omdb_cache: dict[str, dict[str, Any]] = {}
     if sb is not None:
@@ -449,6 +718,23 @@ def main() -> None:
     omdb_calls = 0
     new_cache_rows: list[dict[str, Any]] = []
     quota_reached = False
+
+    # 既知シードデータをキャッシュに補完（OMDb API上限到達時でも『罪人たち』等の重要作を即時反映するため）
+    seed_now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    for seed_id, seed_info in KNOWN_OMDB_SEED_DATA.items():
+        if seed_id not in omdb_cache:
+            seed_row = {
+                "imdb_id": seed_id,
+                "metascore": seed_info.get("metascore"),
+                "rt_score": seed_info.get("rt_score"),
+                "awards_text": seed_info.get("awards_text"),
+                "director": seed_info.get("director"),
+                "country": seed_info.get("country"),
+                "language": seed_info.get("language"),
+                "fetched_at": seed_now_iso,
+            }
+            omdb_cache[seed_id] = seed_row
+            new_cache_rows.append(seed_row)
 
     # 新しい年から順に処理することで、初回バックフィル中でも直近年代からすぐサイトに並ぶ
     for year in sorted(candidates_by_year.keys(), reverse=True):
@@ -485,13 +771,15 @@ def main() -> None:
     # 3. 年ごとのスコアリング & ハイブリッド20本選出 + TMDB日本語・配信取得
     print("[3/4] 年別ハイブリッド20本選出 & TMDB日本語・配信情報を取得中...", flush=True)
     all_selected_records: list[dict[str, Any]] = []
+    processed_years: dict[int, set[str]] = {}
     now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
 
     for year in sorted(candidates_by_year.keys(), reverse=True):
         year_cands = candidates_by_year[year]
-        # OMDbキャッシュが揃っていない年は次回実行に回す（初回3日分割時の不完全データ防止）
+        # OMDbキャッシュが一定数以上揃っていれば選出を実行（マルチバケット新規候補追加時も30本以上または60%以上で即時同期）
         cached_count = sum(1 for c in year_cands if c["imdb_id"] in omdb_cache)
-        if year_cands and cached_count < len(year_cands) * 0.8:
+        min_required_cached = min(30, math.ceil(len(year_cands) * 0.6)) if year_cands else 0
+        if year_cands and cached_count < min_required_cached:
             print(f"  - {year}年: OMDb取得途中 ({cached_count}/{len(year_cands)}) のためスキップ", flush=True)
             continue
 
@@ -510,6 +798,7 @@ def main() -> None:
             enriched.append(merged)
 
         top20 = select_yearly_top20(enriched, target_count=20, top_n=12)
+        processed_years[year] = {item["imdb_id"] for item in top20}
         for item in top20:
             tmdb_info = fetch_tmdb_jp_metadata(item["imdb_id"], tmdb_key)
             time.sleep(0.04)
@@ -539,11 +828,13 @@ def main() -> None:
                 "jp_providers": tmdb_info.get("jp_providers")
                 or {"flatrate": [], "rent": [], "buy": [], "link": None},
                 "overview_ja": tmdb_info.get("overview_ja"),
+                "ai_summary": None,
+                "mood_tags": [],
                 "updated_at": now_iso,
             }
             all_selected_records.append(record)
 
-        print(f"  - {year}年: {len(top20)}本確定", flush=True)
+        print(f"  - {year}年: {len(top20)}本確定 (OMDbキャッシュ: {cached_count}/{len(year_cands)})", flush=True)
 
     if args.dry_run:
         print(json.dumps(all_selected_records[:10], ensure_ascii=False, indent=2))
@@ -551,10 +842,25 @@ def main() -> None:
         return
 
     assert sb is not None
-    existing_ai_rows = sb.select_all("movies", select="imdb_id,ai_summary,mood_tags")
-    upsert_rows = preserve_ai_enrichment(all_selected_records, existing_ai_rows)
+    existing_movie_rows = sb.select_all("movies", select="imdb_id,release_year,ai_summary,mood_tags")
+    watch_status_rows = sb.select_all("user_watch_status", select="imdb_id")
+    protected_watch_ids = {row["imdb_id"] for row in watch_status_rows if row.get("imdb_id")}
+
+    # 再選出された年のうち、新しいTOP20から外れ、かつ user_watch_status で保護されていない古いレコードを掃除
+    stale_ids: list[str] = []
+    for row in existing_movie_rows:
+        y = row.get("release_year")
+        iid = row.get("imdb_id")
+        if y in processed_years and iid and iid not in processed_years[y] and iid not in protected_watch_ids:
+            stale_ids.append(iid)
+
+    upsert_rows = preserve_ai_enrichment(all_selected_records, existing_movie_rows)
     sb.upsert("movies", upsert_rows)
     print(f"  -> Supabase movies 同期完了: {len(upsert_rows)}本", flush=True)
+
+    if stale_ids:
+        sb.delete_by_imdb_ids("movies", stale_ids)
+        print(f"  -> 選出入れ替えに伴う未評価の旧レコード整理: {len(stale_ids)}本削除（視聴記録ありは保護）", flush=True)
 
     # 4. 週次モード時は全収録作品の配信状況も一括最新化（＋Supabase無料枠スリープ防止）
     if args.mode == "weekly":

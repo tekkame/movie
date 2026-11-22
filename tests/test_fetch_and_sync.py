@@ -140,6 +140,110 @@ class TestFetchAndSync(unittest.TestCase):
         self.assertEqual(jwt_headers["apikey"], "eyJhbGciOiJIUzI1NiJ9.dummy")
         self.assertEqual(jwt_headers["Authorization"], "Bearer eyJhbGciOiJIUzI1NiJ9.dummy")
 
+    def test_select_year_candidates_multibucket_rescues_global_and_horror_hits(self) -> None:
+        # 55本のローカル高評価作（投票数少）に、世界的話題作（Sinners相当）とホラー作を混ぜる
+        items = [
+            {
+                "imdb_id": f"tt_local_{i:02d}",
+                "release_year": 2025,
+                "title_en": f"Local Film {i}",
+                "genres": ["Drama"],
+                "imdb_rating": 8.6 - i * 0.01,
+                "imdb_votes": 12000 + i * 100,
+            }
+            for i in range(55)
+        ]
+        items.append(
+            {
+                "imdb_id": "tt31193180",
+                "release_year": 2025,
+                "title_en": "Sinners",
+                "genres": ["Action", "Drama", "Horror"],
+                "imdb_rating": 7.5,
+                "imdb_votes": 414298,
+            }
+        )
+        items.append(
+            {
+                "imdb_id": "tt_horror_rescue",
+                "release_year": 2025,
+                "title_en": "Genre Horror Gem",
+                "genres": ["Horror", "Thriller"],
+                "imdb_rating": 7.0,
+                "imdb_votes": 45000,
+            }
+        )
+
+        selected = fetch_and_sync.select_year_candidates_multibucket(items, year=2025, candidates_per_year=50)
+        self.assertEqual(len(selected), 50)
+        selected_ids = {m["imdb_id"] for m in selected}
+        self.assertIn("tt31193180", selected_ids)
+        self.assertIn("tt_horror_rescue", selected_ids)
+
+    def test_select_year_candidates_multibucket_rescues_high_vote_cult_horror_at_6_5(self) -> None:
+        # バケットAの20枠が別作品で埋まった状況でも、25万票以上かつIMDb 6.5〜6.7のカルトホラーがバケットBで救済されること
+        items = [
+            {
+                "imdb_id": f"tt_major_{i:02d}",
+                "release_year": 2019,
+                "title_en": f"Major Hit {i}",
+                "genres": ["Drama"],
+                "imdb_rating": 8.0 + (i % 5) * 0.1,
+                "imdb_votes": 600000 + i * 10000,
+            }
+            for i in range(25)
+        ]
+        # 6.8未満でも 25万票以上のホラー名作はバケットB対象になる
+        items.append(
+            {
+                "imdb_id": "tt_cult_horror_66",
+                "release_year": 2019,
+                "title_en": "Cult Horror 6.6",
+                "genres": ["Horror", "Mystery"],
+                "imdb_rating": 6.6,
+                "imdb_votes": 320000,
+            }
+        )
+        # 25万票未満で 6.8未満はバケットB対象外
+        items.append(
+            {
+                "imdb_id": "tt_low_horror_66",
+                "release_year": 2019,
+                "title_en": "Low Vote Horror 6.6",
+                "genres": ["Horror"],
+                "imdb_rating": 6.6,
+                "imdb_votes": 100000,
+            }
+        )
+        # 残りを満たすための一般作品
+        for i in range(35):
+            items.append(
+                {
+                    "imdb_id": f"tt_filler_{i:02d}",
+                    "release_year": 2019,
+                    "title_en": f"Filler {i}",
+                    "genres": ["Drama"],
+                    "imdb_rating": 7.6,
+                    "imdb_votes": 50000 + i * 100,
+                }
+            )
+
+        selected = fetch_and_sync.select_year_candidates_multibucket(items, year=2019, candidates_per_year=50)
+        self.assertEqual(len(selected), 50)
+        selected_ids = {m["imdb_id"] for m in selected}
+        self.assertIn("tt_cult_horror_66", selected_ids)
+        self.assertNotIn("tt_low_horror_66", selected_ids)
+
+    def test_preserve_ai_enrichment_ensures_uniform_keys_for_postgrest(self) -> None:
+        records = [
+            {"imdb_id": "tt1", "title_ja": "A"},
+            {"imdb_id": "tt2", "title_ja": "B", "extra_field": 123},
+        ]
+        merged = fetch_and_sync.preserve_ai_enrichment(records, [])
+        self.assertEqual(set(merged[0].keys()), set(merged[1].keys()))
+        self.assertIn("ai_summary", merged[0])
+        self.assertIn("mood_tags", merged[0])
+
 
 if __name__ == "__main__":
     unittest.main()

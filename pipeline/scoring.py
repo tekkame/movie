@@ -62,11 +62,15 @@ def compute_composite_score(
     metascore: int | None,
     rt_score: int | None,
     awards_bonus: float = 0.0,
+    imdb_votes: int | None = None,
 ) -> float:
     """
     批評家評価（最大50点）＋観客評価（最大40点）＋映画賞ボーナス（最大10点）
     の100点満点合成スコアを返す。
-    1980〜90年代などで批評家スコアが両方欠損している場合は IMDb評価と賞で按分補正する。
+    - 批評家スコアが両方欠損している作品のうち、投票数が 80,000 未満のローカル偏重作品は
+      信頼度ペナルティ（×0.82）を適用して不当な上位独占を防ぐ。
+    - 逆に世界的ヒット（25万票以上）や批評家絶賛作（RT>=90 かつ Meta>=80）には
+      僅かな浸透・完成度ボーナス（最大+2.5点、imdb_votes 指定時のみ）を加味する。
     """
     audience_100 = float(imdb_rating) * 10.0 if imdb_rating is not None else 0.0
     awards = max(0.0, min(10.0, float(awards_bonus)))
@@ -74,11 +78,26 @@ def compute_composite_score(
     critic_scores = [float(s) for s in (metascore, rt_score) if s is not None]
     if critic_scores:
         critic_100 = sum(critic_scores) / len(critic_scores)
-        score = critic_100 * 0.50 + audience_100 * 0.40 + awards
+        base_score = critic_100 * 0.50 + audience_100 * 0.40
     else:
         # 批評家スコア欠損時のフォールバック（極端な過大評価を防ぎつつ名作を救済）
-        score = (audience_100 * 0.90) * 0.97 + awards
+        base_score = (audience_100 * 0.90) * 0.97
+        if imdb_votes is not None and int(imdb_votes) < 80000:
+            # 国際的な批評家スコアが一切なく投票数も少ないローカル偏重作品の偏りを抑制
+            base_score *= 0.82
 
+    # 世界的ヒット・批評家絶賛の浸透ボーナス（既存単体テストの後方互換性のため imdb_votes 指定時のみ）
+    reach_bonus = 0.0
+    if imdb_votes is not None:
+        votes = int(imdb_votes)
+        if votes >= 500000:
+            reach_bonus += 1.5
+        elif votes >= 250000:
+            reach_bonus += 1.0
+        if metascore is not None and rt_score is not None and metascore >= 80 and rt_score >= 90:
+            reach_bonus += 1.0
+
+    score = base_score + awards + reach_bonus
     return round(min(100.0, max(0.0, score)), 2)
 
 
@@ -124,6 +143,7 @@ def select_yearly_top20(
                 metascore=m.get("metascore"),
                 rt_score=m.get("rt_score"),
                 awards_bonus=m["awards_bonus"],
+                imdb_votes=m.get("imdb_votes"),
             )
         scored.append(m)
 

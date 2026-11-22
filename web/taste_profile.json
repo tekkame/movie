@@ -1,10 +1,40 @@
 {
-  "critics_weight": 0.5,
-  "audience_weight": 0.4,
-  "awards_weight": 0.1,
-  "genre_weights": {},
-  "favorite_directors": [],
-  "preferred_decades": [],
+  "critics_weight": 0.48,
+  "audience_weight": 0.42,
+  "awards_weight": 0.10,
+  "genre_weights": {
+    "Thriller": 8,
+    "Crime": 7,
+    "Action": 6,
+    "Sci-Fi": 7,
+    "Horror": 7,
+    "Fantasy": 6,
+    "Mystery": 6,
+    "Adventure": 4,
+    "Drama": 0,
+    "Comedy": -1,
+    "Animation": -4,
+    "Music": -8
+  },
+  "favorite_directors": [
+    "Christopher Nolan",
+    "Bong Joon Ho",
+    "Paul Thomas Anderson",
+    "Jordan Peele",
+    "Ryan Coogler",
+    "Edward Berger",
+    "Sean Baker",
+    "Denis Villeneuve",
+    "Coralie Fargeat",
+    "Todd Phillips",
+    "Takashi Yamazaki",
+    "Joseph Kosinski",
+    "Takehiko Inoue",
+    "Ryusuke Hamaguchi",
+    "Makoto Shinkai",
+    "Wes Anderson"
+  ],
+  "preferred_decades": [2020, 2010],
   "max_preferred_runtime": null,
-  "summary": "初期設定"
+  "summary": "クリストファー・ノーラン作品（6本平均★4.7）を筆頭に、緊迫感あるスリラー・濃密なSF/ホラー・圧倒的演出の映画や日本の実写/アニメ傑作を高く評価する一方、静かな内省系ドラマやファミリーアニメにはシビアな本格派"
 }

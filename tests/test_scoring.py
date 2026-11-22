@@ -117,6 +117,25 @@ class TestScoringAndSelection(unittest.TestCase):
         # year_rank が 1..20 で連番になっていること
         self.assertEqual([m["year_rank"] for m in selected], list(range(1, 21)))
 
+    def test_compute_composite_score_backward_compat_and_local_penalty(self) -> None:
+        # imdb_votes 未指定時は従来通り (80 * 0.90) * 0.97 = 69.84 を返す（既存互換性）
+        self.assertEqual(
+            compute_composite_score(imdb_rating=8.0, metascore=None, rt_score=None, awards_bonus=0.0),
+            69.84,
+        )
+
+        # 批評家スコアなし & 投票数8万未満のローカル偏重作品には信頼度ペナルティが適用される
+        local_only = compute_composite_score(
+            imdb_rating=8.8, metascore=None, rt_score=None, awards_bonus=0.0, imdb_votes=12000
+        )
+        # 世界的話題作（Sinners 相当: IMDb 7.5, Meta 84, RT 97, 41万票）が確実に上回ること
+        global_hit = compute_composite_score(
+            imdb_rating=7.5, metascore=84, rt_score=97, awards_bonus=0.0, imdb_votes=414298
+        )
+        self.assertLess(local_only, 65.0)
+        self.assertGreater(global_hit, 75.0)
+        self.assertGreater(global_hit, local_only)
+
 
 if __name__ == "__main__":
     unittest.main()

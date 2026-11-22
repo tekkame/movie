@@ -227,6 +227,7 @@ const IMPRESSION_TAG_GROUPS = [
 
 const IMPRESSION_TAGS_CACHE_KEY = "core_cinema_impression_tags_cache";
 const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
+const TASTE_PANEL_COLLAPSED_KEY = "core_cinema_taste_panel_collapsed";
 
 const state = {
   supabase: null,
@@ -241,6 +242,8 @@ const state = {
   presetGenres: null, // 例: ["Horror", "Thriller"] (プリセット用ORマッチ)
   isSyncingLocalToCloud: false,
   hasShownOfflineSaveHint: false,
+  activeTasteTab: "taste", // "taste" | "guide"
+  isTastePanelCollapsed: false,
 };
 
 function normalizeSupabaseUrl(url) {
@@ -402,28 +405,106 @@ function inferAwardsBonus(movie) {
 }
 
 function buildUserPreferenceSignals() {
-  const genreScores = {};
-  const directorScores = {};
+  const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
+  const genreAcc = {};
+  const directorAcc = {};
+  const decadeAcc = {};
+  const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  let watchedCount = 0;
+  let watchlistCount = 0;
   let ratedCount = 0;
+  let ratingSum = 0;
 
   for (const [imdbId, w] of Object.entries(state.watchMap)) {
-    if (!w || w.my_rating == null) continue;
-    const movie = state.movies.find((m) => m.imdb_id === imdbId);
-    if (!movie) continue;
-    ratedCount += 1;
-    // ★3を基準(0)に、★5=+2, ★4=+1, ★2=-1, ★1=-2
-    const delta = Number(w.my_rating) - 3;
-    for (const g of movie.genres || []) {
-      genreScores[g] = (genreScores[g] || 0) + delta;
+    if (!w) continue;
+    if (w.status === "watched" || w.my_rating != null) {
+      watchedCount += 1;
+    } else if (w.status === "watchlist") {
+      watchlistCount += 1;
     }
+    if (w.my_rating == null) continue;
+    const movie = movieMap.get(imdbId);
+    if (!movie) continue;
+
+    const rating = Number(w.my_rating);
+    if (Number.isNaN(rating) || rating < 1 || rating > 5) continue;
+
+    ratedCount += 1;
+    ratingSum += rating;
+    ratingCounts[Math.round(rating)] = (ratingCounts[Math.round(rating)] || 0) + 1;
+
+    // ユーザーの平均との差または★3.5基準で好悪を学習（例: ★5=+1.5, ★4=+0.5, ★2=-1.5）
+    const delta = rating - 3.5;
+
+    for (const g of movie.genres || []) {
+      if (!genreAcc[g]) genreAcc[g] = { sum: 0, count: 0, deltaSum: 0 };
+      genreAcc[g].sum += rating;
+      genreAcc[g].count += 1;
+      genreAcc[g].deltaSum += delta;
+    }
+
     if (movie.director) {
       for (const d of String(movie.director).split(",").map((s) => s.trim()).filter(Boolean)) {
-        directorScores[d.toLowerCase()] = (directorScores[d.toLowerCase()] || 0) + delta;
+        const key = d.toLowerCase();
+        if (!directorAcc[key]) directorAcc[key] = { name: d, sum: 0, count: 0, deltaSum: 0 };
+        directorAcc[key].sum += rating;
+        directorAcc[key].count += 1;
+        directorAcc[key].deltaSum += delta;
       }
+    }
+
+    if (movie.release_year) {
+      const decade = Math.floor(Number(movie.release_year) / 10) * 10;
+      if (!decadeAcc[decade]) decadeAcc[decade] = { sum: 0, count: 0, deltaSum: 0 };
+      decadeAcc[decade].sum += rating;
+      decadeAcc[decade].count += 1;
+      decadeAcc[decade].deltaSum += delta;
     }
   }
 
-  return { ratedCount, genreScores, directorScores };
+  const avgRating = ratedCount > 0 ? ratingSum / ratedCount : null;
+  const genreScores = {};
+  const genreStats = [];
+  for (const [genre, st] of Object.entries(genreAcc)) {
+    genreScores[genre] = st.deltaSum;
+    genreStats.push({
+      genre,
+      count: st.count,
+      avg: st.sum / st.count,
+      deltaSum: st.deltaSum,
+    });
+  }
+
+  const directorScores = {};
+  const directorStats = [];
+  for (const [key, st] of Object.entries(directorAcc)) {
+    directorScores[key] = st.deltaSum;
+    directorStats.push({
+      key,
+      name: st.name,
+      count: st.count,
+      avg: st.sum / st.count,
+      deltaSum: st.deltaSum,
+    });
+  }
+
+  const decadeScores = {};
+  for (const [dec, st] of Object.entries(decadeAcc)) {
+    decadeScores[dec] = st.deltaSum;
+  }
+
+  return {
+    watchedCount,
+    watchlistCount,
+    ratedCount,
+    avgRating,
+    ratingCounts,
+    genreScores,
+    directorScores,
+    decadeScores,
+    genreStats,
+    directorStats,
+  };
 }
 
 function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals = null) {
@@ -445,6 +526,11 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
 
   let score = critic100 * normCw + audience100 * normAw + awards100 * normWw;
 
+  // 批評家スコアも少なく投票数も少ないローカル作品はマッチ度でも補正
+  if (criticValues.length === 0 && movie.imdb_votes != null && Number(movie.imdb_votes) < 80000) {
+    score *= 0.85;
+  }
+
   // ジャンル重み (genre_weights: 加減点数値 例: +8 / -10、または倍率 1.15 の両方を安全にサポート)
   const genreWeights = profile.genre_weights && typeof profile.genre_weights === "object" ? profile.genre_weights : {};
   const movieGenres = Array.isArray(movie.genres) ? movie.genres : [];
@@ -452,7 +538,6 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
   for (const g of movieGenres) {
     if (genreWeights[g] != null && !Number.isNaN(Number(genreWeights[g]))) {
       const val = Number(genreWeights[g]);
-      // 0 < val <= 2 かつ 整数でないか倍率指定風の場合は倍率換算、それ以外は±ポイント加算
       if (val > 0 && val <= 2.0 && !Number.isInteger(val)) {
         genreAdjustment += (val - 1.0) * 15;
       } else {
@@ -499,25 +584,274 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
     }
   }
 
-  // ユーザーが付けた過去の★評価傾向を軽く反映（評価が溜まるほどパーソナライズ）
+  // ユーザーがリアルタイムに付けた★評価履歴（ジャンル・監督・年代）からも動的に学習して加算
   if (userSignals && userSignals.ratedCount > 0) {
     let personalDelta = 0;
     for (const g of movieGenres) {
       if (userSignals.genreScores[g]) {
-        personalDelta += Math.max(-4, Math.min(4, userSignals.genreScores[g] * 1.2));
+        personalDelta += Math.max(-4.5, Math.min(4.5, userSignals.genreScores[g] * 1.1));
       }
     }
     if (movie.director) {
       for (const d of String(movie.director).split(",").map((s) => s.trim().toLowerCase())) {
         if (userSignals.directorScores[d]) {
-          personalDelta += Math.max(-5, Math.min(5, userSignals.directorScores[d] * 2));
+          personalDelta += Math.max(-6, Math.min(6, userSignals.directorScores[d] * 2.5));
         }
       }
     }
-    score += Math.max(-8, Math.min(8, personalDelta));
+    if (movie.release_year && userSignals.decadeScores) {
+      const decKey = String(Math.floor(Number(movie.release_year) / 10) * 10);
+      if (userSignals.decadeScores[decKey]) {
+        personalDelta += Math.max(-2.5, Math.min(2.5, userSignals.decadeScores[decKey] * 0.4));
+      }
+    }
+    score += Math.max(-10, Math.min(10, personalDelta));
   }
 
   return Math.round(Math.max(0, Math.min(100, score)));
+}
+
+function buildRecommendationReason(movie, userSignals) {
+  const reasons = [];
+  const favDirectors = Array.isArray(state.tasteProfile?.favorite_directors)
+    ? state.tasteProfile.favorite_directors.map((d) => String(d).toLowerCase())
+    : [];
+  const dirLower = String(movie.director || "").toLowerCase();
+  if (dirLower && favDirectors.some((d) => dirLower.includes(d))) {
+    reasons.push(`監督一致 (${movie.director})`);
+  } else if (movie.director && userSignals?.directorScores) {
+    const matchedDir = String(movie.director)
+      .split(",")
+      .map((s) => s.trim())
+      .find((d) => (userSignals.directorScores[d.toLowerCase()] || 0) > 0);
+    if (matchedDir) reasons.push(`高評価監督 (${matchedDir})`);
+  }
+
+  const genreWeights = state.tasteProfile?.genre_weights || {};
+  const strongGenres = (movie.genres || []).filter((g) => Number(genreWeights[g] || 0) >= 6);
+  if (strongGenres.length > 0) {
+    reasons.push(`${strongGenres.slice(0, 2).join("×")}好きに直撃`);
+  }
+
+  if (movie.metascore != null && movie.rt_score != null && movie.metascore >= 80 && movie.rt_score >= 90) {
+    reasons.push(`批評家絶賛 (Meta ${movie.metascore} / RT ${movie.rt_score}%)`);
+  } else if (Number(movie.composite_score || 0) >= 82) {
+    reasons.push(`高スコア (${Number(movie.composite_score).toFixed(1)}点)`);
+  }
+
+  return reasons.slice(0, 2).join(" ・ ") || "総合評価と好みプロファイルが高一致";
+}
+
+function setTastePanelCollapsed(collapsed) {
+  state.isTastePanelCollapsed = Boolean(collapsed);
+  const panel = document.getElementById("taste-guide-panel");
+  const toggleBtn = document.getElementById("toggle-taste-panel-btn");
+  const collapseBtn = document.getElementById("tg-collapse-btn");
+  if (panel) {
+    panel.classList.toggle("is-collapsed", state.isTastePanelCollapsed);
+  }
+  if (toggleBtn) {
+    toggleBtn.setAttribute("aria-expanded", String(!state.isTastePanelCollapsed));
+    toggleBtn.classList.toggle("active", !state.isTastePanelCollapsed);
+  }
+  if (collapseBtn) {
+    collapseBtn.textContent = state.isTastePanelCollapsed ? "▼ 開く" : "▲ 閉じる";
+  }
+  try {
+    localStorage.setItem(TASTE_PANEL_COLLAPSED_KEY, state.isTastePanelCollapsed ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+function switchTasteTab(tabName) {
+  state.activeTasteTab = tabName === "guide" ? "guide" : "taste";
+  document.querySelectorAll(".tg-tab[data-tg-tab]").forEach((btn) => {
+    const isActive = btn.dataset.tgTab === state.activeTasteTab;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", String(isActive));
+  });
+  const tasteBody = document.getElementById("tg-body-taste");
+  const guideBody = document.getElementById("tg-body-guide");
+  if (tasteBody) tasteBody.classList.toggle("hidden", state.activeTasteTab !== "taste");
+  if (guideBody) guideBody.classList.toggle("hidden", state.activeTasteTab !== "guide");
+}
+
+function renderTasteAnalyticsDashboard() {
+  const container = document.getElementById("taste-analytics-content");
+  const summaryPill = document.getElementById("tg-summary-pill");
+  if (!container) return;
+
+  const signals = buildUserPreferenceSignals();
+  const avgStr = signals.avgRating != null ? `★${signals.avgRating.toFixed(2)}` : "-";
+  if (summaryPill) {
+    summaryPill.textContent = `${signals.watchedCount}本視聴済み / 平均 ${avgStr} / 観たい ${signals.watchlistCount}本`;
+  }
+
+  // 好きなジャンルTOP5（評価件数ベース、同率時は平均★順）
+  const topGenres = [...signals.genreStats]
+    .filter((g) => g.count >= 2 && g.avg >= 3.6)
+    .sort((a, b) => b.avg - a.avg || b.count - a.count)
+    .slice(0, 5);
+
+  // シビア・苦手傾向（平均3.0以下、またはtaste_profileでマイナス重み）
+  const lowGenresFromHistory = [...signals.genreStats]
+    .filter((g) => g.count >= 2 && g.avg <= 3.1)
+    .sort((a, b) => a.avg - b.avg);
+
+  const profileNegativeGenres = Object.entries(state.tasteProfile?.genre_weights || {})
+    .filter(([, w]) => Number(w) < 0)
+    .sort((a, b) => Number(a[1]) - Number(b[1]))
+    .map(([g]) => g);
+
+  const topDirectors = [...signals.directorStats]
+    .filter((d) => d.avg >= 4.0)
+    .sort((a, b) => b.avg - a.avg || b.count - a.count)
+    .slice(0, 6);
+
+  // ★分布バー
+  const maxStarCount = Math.max(1, ...Object.values(signals.ratingCounts));
+  const starBarsHtml = [5, 4, 3, 2, 1]
+    .map((star) => {
+      const cnt = signals.ratingCounts[star] || 0;
+      const pct = Math.round((cnt / maxStarCount) * 100);
+      return `
+        <div class="tg-dist-row">
+          <span class="tg-dist-label">★${star}</span>
+          <div class="tg-dist-track"><div class="tg-dist-fill tg-dist-star-${star}" style="width:${pct}%"></div></div>
+          <span class="tg-dist-count">${cnt}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  // 未視聴おすすめTOP5（パーソナル・レコメンド棚）
+  const unwatchedScored = state.movies
+    .filter((m) => {
+      const w = state.watchMap[m.imdb_id];
+      return !w || w.status === "unwatched";
+    })
+    .map((m) => ({
+      movie: m,
+      match: computeMatchScore(m, state.tasteProfile, signals),
+      reason: buildRecommendationReason(m, signals),
+    }))
+    .sort((a, b) => b.match - a.match || (b.movie.composite_score || 0) - (a.movie.composite_score || 0))
+    .slice(0, 5);
+
+  const genreEmoji = {
+    Thriller: "🔥",
+    "Sci-Fi": "🚀",
+    Horror: "👻",
+    Action: "⚔️",
+    Crime: "🕵️",
+    Fantasy: "✨",
+    Mystery: "🧩",
+    Adventure: "🧭",
+    Drama: "🎭",
+    Comedy: "😄",
+    Animation: "🎨",
+    Music: "🎵",
+  };
+
+  const topGenresHtml =
+    topGenres.length > 0
+      ? topGenres
+          .map(
+            (g) =>
+              `<button type="button" class="tg-chip tg-chip-good" data-filter-genre="${escapeHtml(g.genre)}" title="${escapeHtml(g.genre)}で絞り込む">${genreEmoji[g.genre] || "🎬"} ${escapeHtml(g.genre)} <strong>★${g.avg.toFixed(1)}</strong></button>`
+          )
+          .join("")
+      : `<span class="tg-empty-hint">★評価を増やすと好きなジャンルが表示されます</span>`;
+
+  const directorsHtml =
+    topDirectors.length > 0
+      ? topDirectors
+          .map(
+            (d) =>
+              `<button type="button" class="tg-chip tg-chip-dir" data-filter-query="${escapeHtml(d.name)}" title="${escapeHtml(d.name)}の作品を検索">🎬 ${escapeHtml(d.name)} ★${d.avg.toFixed(1)}</button>`
+          )
+          .join("")
+      : (state.tasteProfile?.favorite_directors || [])
+          .slice(0, 5)
+          .map(
+            (d) =>
+              `<button type="button" class="tg-chip tg-chip-dir" data-filter-query="${escapeHtml(d)}" title="${escapeHtml(d)}の作品を検索">🎬 ${escapeHtml(d)}</button>`
+          )
+          .join("");
+
+  const cautiousList =
+    lowGenresFromHistory.length > 0
+      ? lowGenresFromHistory.slice(0, 3).map((g) => `${g.genre} (★${g.avg.toFixed(1)})`)
+      : profileNegativeGenres.slice(0, 3);
+
+  const cautiousHtml =
+    cautiousList.length > 0
+      ? cautiousList.map((label) => `<span class="tg-chip tg-chip-low">${escapeHtml(label)}</span>`).join("")
+      : `<span class="tg-empty-hint">データ蓄積中</span>`;
+
+  const recsHtml =
+    unwatchedScored.length > 0
+      ? unwatchedScored
+          .map(({ movie: m, match, reason }, idx) => {
+            const flatrate = (m.jp_providers?.flatrate || []).slice(0, 1);
+            return `
+              <button type="button" class="tg-rec-item" data-open-movie="${escapeHtml(m.imdb_id)}">
+                <div class="tg-rec-rank">#${idx + 1}</div>
+                <div class="tg-rec-main">
+                  <div class="tg-rec-title-row">
+                    <span class="tg-rec-title">${escapeHtml(m.title_ja)}</span>
+                    <span class="tg-rec-year">(${m.release_year})</span>
+                  </div>
+                  <div class="tg-rec-reason">${escapeHtml(reason)}</div>
+                </div>
+                <div class="tg-rec-right">
+                  <span class="tg-rec-match">マッチ ${match}%</span>
+                  ${flatrate.length > 0 ? `<span class="tg-rec-prov">${escapeHtml(flatrate[0])}</span>` : ""}
+                </div>
+              </button>
+            `;
+          })
+          .join("")
+      : `<p class="tg-empty-hint">未視聴の推薦作品を計算中...</p>`;
+
+  container.innerHTML = `
+    <div class="tg-col-profile">
+      <div class="tg-summary-box">
+        <div class="tg-box-title">あなたのシネマ傾向</div>
+        <p class="tg-profile-summary">${escapeHtml(state.tasteProfile?.summary || "評価を付けるほど好みが言語化されます。")}</p>
+      </div>
+
+      <div class="tg-stat-block">
+        <div class="tg-box-title">好相性ジャンル（クリックで絞込）</div>
+        <div class="tg-chips-wrap">${topGenresHtml}</div>
+      </div>
+
+      <div class="tg-stat-block">
+        <div class="tg-box-title">高評価・相性抜群の監督（クリックで検索）</div>
+        <div class="tg-chips-wrap">${directorsHtml}</div>
+      </div>
+
+      <div class="tg-bottom-split">
+        <div class="tg-stat-block">
+          <div class="tg-box-title">シビアに評価しがちな領域</div>
+          <div class="tg-chips-wrap">${cautiousHtml}</div>
+        </div>
+        <div class="tg-stat-block">
+          <div class="tg-box-title">★評価の分布 (${signals.ratedCount}本)</div>
+          <div class="tg-dist-chart">${starBarsHtml}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tg-col-recs">
+      <div class="tg-recs-header">
+        <div class="tg-box-title">🎯 あなたへの未視聴おすすめ TOP5</div>
+        <button type="button" class="tg-see-all-btn" data-apply-preset="tonight_for_me">見放題で一覧を見る →</button>
+      </div>
+      <div class="tg-recs-list">${recsHtml}</div>
+    </div>
+  `;
 }
 
 function openAuthModal() {
@@ -566,6 +900,12 @@ function showToast(message, options = {}) {
 async function initApp() {
   await loadTasteProfile();
 
+  try {
+    state.isTastePanelCollapsed = localStorage.getItem(TASTE_PANEL_COLLAPSED_KEY) === "1";
+  } catch {
+    state.isTastePanelCollapsed = false;
+  }
+
   const cfg = getConfig();
   if (cfg && window.supabase) {
     state.supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
@@ -599,6 +939,7 @@ async function initApp() {
   populateYearFilter();
   populateGenreFilter();
   updateAuthUI();
+  setTastePanelCollapsed(state.isTastePanelCollapsed);
   bindEvents();
   renderMovies();
 }
@@ -1019,6 +1360,7 @@ function renderMovies() {
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
   updateWatchStatsSummary();
+  renderTasteAnalyticsDashboard();
 
   if (list.length === 0) {
     grid.innerHTML = `<p class="empty-state">条件に一致する映画がありません。フィルタを緩めてお試しください。</p>`;
@@ -1584,6 +1926,67 @@ function bindEvents() {
   document.getElementById("gacha-btn").addEventListener("click", openGachaModal);
   document.getElementById("gacha-reroll-btn").addEventListener("click", drawGachaPicks);
   document.getElementById("copy-taste-btn").addEventListener("click", handleCopyTasteData);
+
+  const toggleTasteBtn = document.getElementById("toggle-taste-panel-btn");
+  if (toggleTasteBtn) {
+    toggleTasteBtn.addEventListener("click", () => {
+      setTastePanelCollapsed(!state.isTastePanelCollapsed);
+    });
+  }
+
+  const collapseBtn = document.getElementById("tg-collapse-btn");
+  if (collapseBtn) {
+    collapseBtn.addEventListener("click", () => {
+      setTastePanelCollapsed(!state.isTastePanelCollapsed);
+    });
+  }
+
+  document.querySelectorAll(".tg-tab[data-tg-tab]").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      if (state.isTastePanelCollapsed) {
+        setTastePanelCollapsed(false);
+      }
+      switchTasteTab(tabBtn.dataset.tgTab);
+    });
+  });
+
+  const tastePanel = document.getElementById("taste-guide-panel");
+  if (tastePanel) {
+    tastePanel.addEventListener("click", (e) => {
+      const recBtn = e.target.closest("[data-open-movie]");
+      if (recBtn) {
+        openMovieModal(recBtn.dataset.openMovie);
+        return;
+      }
+
+      const genreBtn = e.target.closest("[data-filter-genre]");
+      if (genreBtn) {
+        resetAllFilterControls();
+        document.getElementById("filter-genre").value = genreBtn.dataset.filterGenre;
+        document.getElementById("filter-sort").value = "match_desc";
+        renderMovies();
+        return;
+      }
+
+      const queryBtn = e.target.closest("[data-filter-query]");
+      if (queryBtn) {
+        resetAllFilterControls();
+        document.getElementById("filter-query").value = queryBtn.dataset.filterQuery;
+        renderMovies();
+        return;
+      }
+
+      const presetLinkBtn = e.target.closest("[data-apply-preset]");
+      if (presetLinkBtn) {
+        const preset = presetLinkBtn.dataset.applyPreset;
+        if (state.activePreset !== preset) {
+          applyPreset(preset);
+        } else {
+          renderMovies();
+        }
+      }
+    });
+  }
 
   document.getElementById("movies-grid").addEventListener("click", (e) => {
     // ワンタッチ評価バー内部のクリックはモーダルを開かない
