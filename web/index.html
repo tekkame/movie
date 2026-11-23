@@ -22,8 +22,9 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="toggle-ranking-btn" class="btn btn-secondary ranking-nav-btn" type="button" aria-pressed="false">🏆 マイランキング <span id="header-ranking-count" class="ranking-count-badge">0</span></button>
         <button id="toggle-taste-panel-btn" class="btn btn-secondary" type="button" aria-expanded="false" aria-controls="taste-guide-panel">🧠 好み分析・使い方</button>
-        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">📋 好みコピー</button>
+        <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">🧠 好みデータをコピー</button>
         <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
         <button id="auth-btn" class="btn btn-secondary" type="button">🔒 ログイン</button>
       </div>
@@ -66,148 +67,171 @@
           </article>
           <article class="guide-step-card">
             <div class="guide-step-num">STEP 3</div>
-            <h3>印象チップ &amp; 好みコピーで深掘り</h3>
-            <p>カードをクリックすると「良かった点・合わなかった点」チップや感想メモを残せます。<code>📋 好みコピー</code> を使えば、あなたの評価履歴をそのままAI相談用プロンプトとして出力できます。</p>
+            <h3>⚔️ 2択バトルでマイランキングを作成</h3>
+            <p>★5を付けた作品や詳細モーダルから <code>⚔️ 順位を決める</code> を押すと、二分探索の2択バトルで瞬時に歴代マイランキングを決定。<code>🧠 好みデータをコピー</code> にも順位が反映されます。</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="presets-bar" aria-label="シーン別プリセットとガチャ">
-      <div class="presets-scroll">
-        <button type="button" class="preset-btn" data-preset="tonight_for_me">🔥 今すぐ観られる自分向け</button>
-        <button type="button" class="preset-btn" data-preset="weekday_short">⏱ 平日サクッと</button>
-        <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
-        <button type="button" class="preset-btn" data-preset="horror_thriller">👻 ホラー・スリラー</button>
-      </div>
-      <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
-    </section>
-
-    <section class="filters-panel" aria-label="映画の絞り込み">
-      <div class="filter-top-bar">
-        <div class="search-wrap">
-          <input id="filter-query" type="search" placeholder="邦題・原題・監督名・タグで検索..." />
+    <div id="browse-view">
+      <section class="presets-bar" aria-label="シーン別プリセットとガチャ">
+        <div class="presets-scroll">
+          <button type="button" class="preset-btn" data-preset="tonight_for_me">🔥 今すぐ観られる自分向け</button>
+          <button type="button" class="preset-btn" data-preset="weekday_short">⏱ 平日サクッと</button>
+          <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
+          <button type="button" class="preset-btn" data-preset="horror_thriller">👻 ホラー・スリラー</button>
         </div>
-        <button id="toggle-filters-btn" class="btn btn-secondary toggle-filters-btn" type="button" aria-expanded="false" aria-controls="filters-collapsible">
-          <span>⚙ 詳細フィルタ</span>
-          <span id="active-filters-badge" class="active-filters-badge hidden">0</span>
-        </button>
-      </div>
+        <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
+      </section>
 
-      <div id="filters-collapsible" class="filters-collapsible">
-        <div class="filter-row">
-          <div class="filter-group">
-            <label for="filter-decade">年代</label>
-            <select id="filter-decade">
-              <option value="all">すべて（1980〜）</option>
-              <option value="2020s">2020年代</option>
-              <option value="2010s">2010年代</option>
-              <option value="2000s">2000年代</option>
-              <option value="1990s">1990年代</option>
-              <option value="1980s">1980年代</option>
-            </select>
+      <section class="filters-panel" aria-label="映画の絞り込み">
+        <div class="filter-top-bar">
+          <div class="search-wrap">
+            <input id="filter-query" type="search" placeholder="邦題・原題・監督名・タグで検索..." />
           </div>
-
-          <div class="filter-group">
-            <label for="filter-year">公開年</label>
-            <select id="filter-year">
-              <option value="all">すべての年</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label for="filter-provider">配信サービス</label>
-            <select id="filter-provider">
-              <option value="all">指定なし</option>
-              <option value="U-NEXT">U-NEXT</option>
-              <option value="Amazon Prime Video">Amazon Prime Video</option>
-              <option value="Netflix">Netflix</option>
-              <option value="Disney Plus">Disney+</option>
-              <option value="Hulu">Hulu</option>
-              <option value="Apple TV">Apple TV</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label for="filter-slot">選出枠</label>
-            <select id="filter-slot">
-              <option value="all">すべて（各年20本）</option>
-              <option value="top12">総合TOP12</option>
-              <option value="genre_pick">ジャンル・非英語圏代表枠</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label for="filter-genre">ジャンル</label>
-            <select id="filter-genre">
-              <option value="all">すべてのジャンル</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label for="filter-runtime">上映時間</label>
-            <select id="filter-runtime">
-              <option value="">指定なし</option>
-              <option value="115">115分以下</option>
-              <option value="140">140分以下</option>
-            </select>
-          </div>
-
-          <div class="filter-group">
-            <label for="filter-watch">視聴ステータス</label>
-            <select id="filter-watch">
-              <option value="all">すべて</option>
-              <option value="unwatched">未視聴のみ</option>
-              <option value="watchlist">観たいリスト</option>
-              <option value="watched">視聴済み</option>
-            </select>
-          </div>
+          <button id="toggle-filters-btn" class="btn btn-secondary toggle-filters-btn" type="button" aria-expanded="false" aria-controls="filters-collapsible">
+            <span>⚙ 詳細フィルタ</span>
+            <span id="active-filters-badge" class="active-filters-badge hidden">0</span>
+          </button>
         </div>
 
-        <div class="filter-row-secondary">
-          <label class="checkbox-label">
-            <input id="filter-flatrate-only" type="checkbox" />
-            <span>見放題のみ</span>
-          </label>
-          <div class="filter-group compact">
-            <select id="filter-sort" aria-label="並び順">
-              <option value="year_desc">新しい年順（各年ランク順）</option>
-              <option value="match_desc">自分マッチ度が高い順</option>
-              <option value="score_desc">総合スコアが高い順</option>
-              <option value="imdb_desc">観客評価（IMDb）が高い順</option>
-              <option value="meta_desc">批評家評価（Metascore）が高い順</option>
-            </select>
+        <div id="filters-collapsible" class="filters-collapsible">
+          <div class="filter-row">
+            <div class="filter-group">
+              <label for="filter-decade">年代</label>
+              <select id="filter-decade">
+                <option value="all">すべて（1980〜）</option>
+                <option value="2020s">2020年代</option>
+                <option value="2010s">2010年代</option>
+                <option value="2000s">2000年代</option>
+                <option value="1990s">1990年代</option>
+                <option value="1980s">1980年代</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-year">公開年</label>
+              <select id="filter-year">
+                <option value="all">すべての年</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-provider">配信サービス</label>
+              <select id="filter-provider">
+                <option value="all">指定なし</option>
+                <option value="U-NEXT">U-NEXT</option>
+                <option value="Amazon Prime Video">Amazon Prime Video</option>
+                <option value="Netflix">Netflix</option>
+                <option value="Disney Plus">Disney+</option>
+                <option value="Hulu">Hulu</option>
+                <option value="Apple TV">Apple TV</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-slot">選出枠</label>
+              <select id="filter-slot">
+                <option value="all">すべて（各年20本）</option>
+                <option value="top12">総合TOP12</option>
+                <option value="genre_pick">ジャンル・非英語圏代表枠</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-genre">ジャンル</label>
+              <select id="filter-genre">
+                <option value="all">すべてのジャンル</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-runtime">上映時間</label>
+              <select id="filter-runtime">
+                <option value="">指定なし</option>
+                <option value="115">115分以下</option>
+                <option value="140">140分以下</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="filter-watch">視聴ステータス</label>
+              <select id="filter-watch">
+                <option value="all">すべて</option>
+                <option value="unwatched">未視聴のみ</option>
+                <option value="watchlist">観たいリスト</option>
+                <option value="watched">視聴済み</option>
+              </select>
+            </div>
           </div>
-          <button id="reset-filters-btn" class="btn btn-ghost" type="button">条件リセット</button>
-        </div>
-      </div>
-    </section>
 
-    <nav id="year-tabs-bar" class="year-tabs-bar" aria-label="公開年タブ"></nav>
+          <div class="filter-row-secondary">
+            <label class="checkbox-label">
+              <input id="filter-flatrate-only" type="checkbox" />
+              <span>見放題のみ</span>
+            </label>
+            <div class="filter-group compact">
+              <select id="filter-sort" aria-label="並び順">
+                <option value="year_desc">新しい年順（各年ランク順）</option>
+                <option value="match_desc">自分マッチ度が高い順</option>
+                <option value="score_desc">総合スコアが高い順</option>
+                <option value="imdb_desc">観客評価（IMDb）が高い順</option>
+                <option value="meta_desc">批評家評価（Metascore）が高い順</option>
+              </select>
+            </div>
+            <button id="reset-filters-btn" class="btn btn-ghost" type="button">条件リセット</button>
+          </div>
+        </div>
+      </section>
 
-    <div class="results-bar">
-      <div class="results-summary">
-        <div id="results-count" class="results-count">読み込み中...</div>
-        <div id="watch-stats-pill" class="watch-stats-pill"></div>
-      </div>
-      <div class="results-controls">
-        <div class="legend">
-          <span class="legend-item"><span class="dot dot-top"></span>総合TOP12</span>
-          <span class="legend-item"><span class="dot dot-genre"></span>代表枠</span>
+      <nav id="year-tabs-bar" class="year-tabs-bar" aria-label="公開年タブ"></nav>
+
+      <div class="results-bar">
+        <div class="results-summary">
+          <div id="results-count" class="results-count">読み込み中...</div>
+          <div id="watch-stats-pill" class="watch-stats-pill"></div>
         </div>
-        <div class="view-mode-toggle" role="group" aria-label="表示切り替え">
-          <button id="view-mode-card" type="button" class="view-mode-btn active" data-view-mode="card" aria-pressed="true" title="カード表示">▦ カード</button>
-          <button id="view-mode-list" type="button" class="view-mode-btn" data-view-mode="list" aria-pressed="false" title="高速採点リスト表示">☰ リスト</button>
+        <div class="results-controls">
+          <div class="legend">
+            <span class="legend-item"><span class="dot dot-top"></span>総合TOP12</span>
+            <span class="legend-item"><span class="dot dot-genre"></span>代表枠</span>
+          </div>
+          <button id="results-ranking-btn" type="button" class="btn btn-secondary results-ranking-btn" aria-pressed="false">🏆 マイランキング <span id="results-ranking-count" class="ranking-count-badge">0</span></button>
+          <div class="view-mode-toggle" role="group" aria-label="表示切り替え">
+            <button id="view-mode-card" type="button" class="view-mode-btn active" data-view-mode="card" aria-pressed="true" title="カード表示">▦ カード</button>
+            <button id="view-mode-list" type="button" class="view-mode-btn" data-view-mode="list" aria-pressed="false" title="高速採点リスト表示">☰ リスト</button>
+          </div>
         </div>
       </div>
+
+      <section id="movies-grid" class="movies-grid" aria-live="polite"></section>
     </div>
 
-    <section id="movies-grid" class="movies-grid" aria-live="polite"></section>
+    <!-- 🏆 マイランキング ビュー -->
+    <section id="ranking-view" class="ranking-view hidden" aria-label="マイランキング">
+      <div class="ranking-header-bar">
+        <div class="ranking-header-left">
+          <button id="ranking-back-btn" type="button" class="btn btn-secondary">← 映画一覧へ戻る</button>
+          <div>
+            <h2 class="ranking-page-title">🏆 マイランキング（歴代ベスト）</h2>
+            <p id="ranking-subtitle" class="ranking-subtitle">お気に入りの映画を2択バトルで順位付け</p>
+          </div>
+        </div>
+      </div>
+      <div id="ranking-unranked-banner" class="ranking-unranked-banner hidden"></div>
+      <div id="ranking-list" class="ranking-list"></div>
+    </section>
   </main>
 
   <!-- 映画詳細・視聴記録モーダル -->
   <dialog id="movie-modal" class="modal">
     <div id="modal-body" class="modal-body"></div>
+  </dialog>
+
+  <!-- ⚔️ 2択バトル（二分探索ランキング）モーダル -->
+  <dialog id="battle-modal" class="modal modal-battle">
+    <div id="battle-modal-body" class="modal-body battle-modal-body"></div>
   </dialog>
 
   <!-- 🎲 今夜の3本ガチャモーダル -->

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS public.user_watch_status (
   imdb_id         TEXT PRIMARY KEY REFERENCES public.movies(imdb_id) ON DELETE CASCADE,
   status          TEXT NOT NULL DEFAULT 'unwatched' CHECK (status IN ('unwatched', 'watchlist', 'watched')),
   my_rating       SMALLINT CHECK (my_rating IS NULL OR (my_rating >= 1 AND my_rating <= 5)),
+  personal_rank   INTEGER,
   impression_tags TEXT[] DEFAULT '{}',
   memo            TEXT,
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -78,6 +79,13 @@ CREATE TABLE IF NOT EXISTS public.user_watch_status (
 
 ALTER TABLE public.user_watch_status
   ADD COLUMN IF NOT EXISTS impression_tags TEXT[] DEFAULT '{}';
+
+ALTER TABLE public.user_watch_status
+  ADD COLUMN IF NOT EXISTS personal_rank INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_user_watch_status_personal_rank
+  ON public.user_watch_status (personal_rank ASC)
+  WHERE personal_rank IS NOT NULL;
 
 -- ============================================================================
 -- Row Level Security (RLS) 設定

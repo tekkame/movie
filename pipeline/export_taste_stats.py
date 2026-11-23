@@ -93,6 +93,7 @@ def aggregate_taste_stats(
     watched_items: list[dict[str, Any]] = []
     watchlist_items: list[dict[str, Any]] = []
     rated_items: list[dict[str, Any]] = []
+    ranked_items: list[dict[str, Any]] = []
 
     rating_counts: dict[int, int] = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
     genre_acc: dict[str, dict[str, Any]] = defaultdict(lambda: {"count": 0, "rated_count": 0, "rating_sum": 0})
@@ -108,6 +109,11 @@ def aggregate_taste_stats(
         status = row.get("status") or "unwatched"
         raw_rating = row.get("my_rating")
         rating = int(raw_rating) if raw_rating is not None else None
+        raw_rank = row.get("personal_rank")
+        try:
+            personal_rank = int(raw_rank) if raw_rank is not None and int(raw_rank) > 0 else None
+        except (TypeError, ValueError):
+            personal_rank = None
         tags = [str(t).strip() for t in (row.get("impression_tags") or []) if str(t).strip()]
         memo = (row.get("memo") or "").strip()
 
@@ -122,10 +128,14 @@ def aggregate_taste_stats(
             "composite_score": movie.get("composite_score"),
             "status": status,
             "my_rating": rating,
+            "personal_rank": personal_rank,
             "impression_tags": tags,
             "memo": memo,
             "updated_at": row.get("updated_at") or "",
         }
+
+        if personal_rank is not None:
+            ranked_items.append(entry)
 
         if status == "watched" or rating is not None:
             watched_items.append(entry)
@@ -158,6 +168,7 @@ def aggregate_taste_stats(
                         director_acc[d]["rated_count"] += 1
                         director_acc[d]["rating_sum"] += rating
 
+    ranked_items.sort(key=lambda x: (x["personal_rank"], -(x["release_year"] or 0)))
     watched_items.sort(
         key=lambda x: (x["my_rating"] if x["my_rating"] is not None else -1, x["release_year"] or 0),
         reverse=True,
@@ -197,12 +208,14 @@ def aggregate_taste_stats(
             "watched_count": len(watched_items),
             "rated_count": total_rated,
             "watchlist_count": len(watchlist_items),
+            "ranked_count": len(ranked_items),
             "avg_rating": avg_rating,
         },
         "rating_distribution": rating_distribution,
         "by_genre": _finalize_bucket(genre_acc, "genre"),
         "by_impression_tag": _finalize_bucket(tag_acc, "tag"),
         "by_director": _finalize_bucket(director_acc, "director"),
+        "ranked_items": ranked_items,
         "watched_items": watched_items,
         "watchlist_items": watchlist_items,
     }
@@ -221,11 +234,29 @@ def render_markdown_report(stats: dict[str, Any]) -> str:
         f"- 視聴済み（または評価済み）: {s['watched_count']}本",
         f"- ★評価済み: {s['rated_count']}本（平均: {avg_str}）",
         f"- 観たいリスト: {s['watchlist_count']}本",
+        f"- マイランキング登録済み: {s.get('ranked_count', len(stats.get('ranked_items', [])))}本",
+        "",
+        "## 🏆 マイランキング（1位〜）",
+    ]
+
+    ranked_items = stats.get("ranked_items") or []
+    if ranked_items:
+        for item in ranked_items:
+            rating_str = f"★{item['my_rating']}" if item["my_rating"] is not None else "未評価"
+            tags_str = f" [{'・'.join(item['impression_tags'])}]" if item["impression_tags"] else ""
+            memo_str = f" | メモ: {item['memo']}" if item["memo"] else ""
+            lines.append(
+                f"- {item['personal_rank']}位: 『{item['title_ja']}』 ({item['release_year']} / {item['director'] or '不明'}) {rating_str}{tags_str}{memo_str}"
+            )
+    else:
+        lines.append("- マイランキングはまだありません")
+
+    lines.extend([
         "",
         "## ★別集計",
         "| 評価 | 件数 | 割合 |",
         "| --- | ---: | ---: |",
-    ]
+    ])
 
     for row in stats["rating_distribution"]:
         lines.append(f"| ★{row['stars']} | {row['count']}件 | {row['percentage']:.1f}% |")

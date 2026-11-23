@@ -226,6 +226,7 @@ const IMPRESSION_TAG_GROUPS = [
 ];
 
 const IMPRESSION_TAGS_CACHE_KEY = "core_cinema_impression_tags_cache";
+const PERSONAL_RANK_CACHE_KEY = "core_cinema_personal_rank_cache";
 const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
 const TASTE_PANEL_OPEN_KEY = "core_cinema_taste_panel_open_v3";
 const FILTER_PREFS_STORAGE_KEY = "core_cinema_filter_prefs_v3";
@@ -238,7 +239,7 @@ const state = {
   userEmail: null,
   movies: [],
   filteredMovies: [],
-  watchMap: {}, // imdb_id -> { status, my_rating, impression_tags, memo, updated_at }
+  watchMap: {}, // imdb_id -> { status, my_rating, personal_rank, impression_tags, memo, updated_at }
   tasteProfile: { ...DEFAULT_TASTE_PROFILE },
   activePreset: null,
   presetGenres: null, // 例: ["Horror", "Thriller"] (プリセット用ORマッチ)
@@ -247,7 +248,9 @@ const state = {
   activeTasteTab: "taste", // "taste" | "guide"
   isTastePanelOpen: false,
   viewMode: "card", // "card" | "list"
+  activeMainView: "browse", // "browse" | "ranking"
   isMobileFiltersOpen: false,
+  battle: null, // { targetMovie, ranked, low, high, step, totalEstimatedSteps, queue, phase, decidedRank, isSaving }
 };
 
 function normalizeSupabaseUrl(url) {
@@ -328,14 +331,73 @@ function saveImpressionTagsCache(imdbId, tags) {
   }
 }
 
+function normalizePersonalRank(val) {
+  if (val == null || val === "") return null;
+  const num = Number(val);
+  if (!Number.isInteger(num) || num <= 0) return null;
+  return num;
+}
+
+function loadPersonalRankCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PERSONAL_RANK_CACHE_KEY) || "{}");
+    const result = {};
+    for (const [id, rank] of Object.entries(raw || {})) {
+      const norm = normalizePersonalRank(rank);
+      if (norm != null) result[id] = norm;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function savePersonalRankCacheEntry(imdbId, rank) {
+  try {
+    const cache = loadPersonalRankCache();
+    const norm = normalizePersonalRank(rank);
+    if (norm != null) {
+      cache[imdbId] = norm;
+    } else {
+      delete cache[imdbId];
+    }
+    localStorage.setItem(PERSONAL_RANK_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // localStorage利用不可時は無視
+  }
+}
+
+function syncPersonalRankCacheFromWatchMap(watchMapObj = state.watchMap) {
+  try {
+    const cache = {};
+    for (const [id, entry] of Object.entries(watchMapObj || {})) {
+      const norm = normalizePersonalRank(entry?.personal_rank);
+      if (norm != null) {
+        cache[id] = norm;
+      }
+    }
+    localStorage.setItem(PERSONAL_RANK_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore
+  }
+}
+
 function normalizeWatchEntry(row) {
   if (!row) {
-    return { status: "unwatched", my_rating: null, impression_tags: [], memo: "", updated_at: null };
+    return {
+      status: "unwatched",
+      my_rating: null,
+      personal_rank: null,
+      impression_tags: [],
+      memo: "",
+      updated_at: null,
+    };
   }
   return {
     ...row,
     status: row.status || "unwatched",
     my_rating: row.my_rating != null ? Number(row.my_rating) : null,
+    personal_rank: normalizePersonalRank(row.personal_rank),
     impression_tags: Array.isArray(row.impression_tags) ? row.impression_tags.filter(Boolean) : [],
     memo: row.memo || "",
     updated_at: row.updated_at || null,
@@ -347,6 +409,7 @@ function isMeaningfulWatchEntry(entry) {
   return (
     (entry.status && entry.status !== "unwatched") ||
     entry.my_rating != null ||
+    normalizePersonalRank(entry.personal_rank) != null ||
     (Array.isArray(entry.impression_tags) && entry.impression_tags.length > 0) ||
     Boolean(entry.memo && String(entry.memo).trim())
   );
@@ -358,14 +421,27 @@ function activateDemoMode(customMessageHtml = null) {
   state.userEmail = null;
   state.movies = DEMO_MOVIES;
   const rawMap = loadLocalWatchMap();
-  const cache = loadImpressionTagsCache();
+  const tagsCache = loadImpressionTagsCache();
+  const rankCache = loadPersonalRankCache();
   state.watchMap = {};
   for (const [id, entry] of Object.entries(rawMap)) {
     const norm = normalizeWatchEntry(entry);
-    if (norm.impression_tags.length === 0 && Array.isArray(cache[id])) {
-      norm.impression_tags = cache[id];
+    if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[id])) {
+      norm.impression_tags = tagsCache[id];
+    }
+    if (norm.personal_rank == null && rankCache[id] != null) {
+      norm.personal_rank = rankCache[id];
     }
     state.watchMap[id] = norm;
+  }
+  for (const [id, rank] of Object.entries(rankCache)) {
+    if (!state.watchMap[id]) {
+      state.watchMap[id] = normalizeWatchEntry({
+        status: "watched",
+        personal_rank: rank,
+        impression_tags: Array.isArray(tagsCache[id]) ? tagsCache[id] : [],
+      });
+    }
   }
   const banner = document.getElementById("demo-banner");
   if (customMessageHtml) {
@@ -1100,12 +1176,18 @@ function mergeWatchEntry(remoteEntry, localEntry) {
   if (localTime > remoteTime) {
     return {
       ...localNorm,
+      personal_rank: localNorm.personal_rank != null ? localNorm.personal_rank : remoteNorm.personal_rank,
       impression_tags:
         localNorm.impression_tags.length > 0 ? localNorm.impression_tags : remoteNorm.impression_tags,
       memo: localNorm.memo || remoteNorm.memo,
     };
   }
-  return remoteNorm;
+  return {
+    ...remoteNorm,
+    personal_rank: remoteNorm.personal_rank != null ? remoteNorm.personal_rank : localNorm.personal_rank,
+    impression_tags:
+      remoteNorm.impression_tags.length > 0 ? remoteNorm.impression_tags : localNorm.impression_tags,
+  };
 }
 
 async function loadSupabaseData() {
@@ -1132,13 +1214,17 @@ async function loadSupabaseData() {
 
   state.movies = moviesRes.data || [];
   state.watchMap = {};
-  const cache = loadImpressionTagsCache();
+  const tagsCache = loadImpressionTagsCache();
+  const rankCache = loadPersonalRankCache();
   const remoteMap = {};
 
   for (const row of watchRes.data || []) {
     const norm = normalizeWatchEntry(row);
-    if (norm.impression_tags.length === 0 && Array.isArray(cache[row.imdb_id])) {
-      norm.impression_tags = cache[row.imdb_id];
+    if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[row.imdb_id])) {
+      norm.impression_tags = tagsCache[row.imdb_id];
+    }
+    if (norm.personal_rank == null && rankCache[row.imdb_id] != null) {
+      norm.personal_rank = rankCache[row.imdb_id];
     }
     remoteMap[row.imdb_id] = norm;
   }
@@ -1161,6 +1247,39 @@ async function loadSupabaseData() {
     }
     state.watchMap[id] = mergeWatchEntry(remoteMap[id], localEntry);
   }
+
+  // personal_rankキャッシュにあってremote/localどちらにも未登録のIDも復元
+  for (const [id, rank] of Object.entries(rankCache)) {
+    if (!validMovieIds.has(id)) continue;
+    if (!state.watchMap[id]) {
+      state.watchMap[id] = normalizeWatchEntry({
+        status: "watched",
+        personal_rank: rank,
+        impression_tags: Array.isArray(tagsCache[id]) ? tagsCache[id] : [],
+      });
+    } else if (state.watchMap[id].personal_rank == null) {
+      state.watchMap[id].personal_rank = rank;
+    }
+  }
+}
+
+async function upsertWatchRowsWithColumnFallback(rows) {
+  let currentRows = rows.map((r) => ({ ...r }));
+  let res = await state.supabase.from("user_watch_status").upsert(currentRows);
+
+  if (res.error && isMissingColumnError(res.error, "personal_rank")) {
+    currentRows = currentRows.map(({ personal_rank: _omitRank, ...rest }) => rest);
+    res = await state.supabase.from("user_watch_status").upsert(currentRows);
+  }
+  if (res.error && isMissingColumnError(res.error, "impression_tags")) {
+    currentRows = currentRows.map(({ impression_tags: _omitTags, ...rest }) => rest);
+    res = await state.supabase.from("user_watch_status").upsert(currentRows);
+  }
+  if (res.error && (isMissingColumnError(res.error, "personal_rank") || isMissingColumnError(res.error, "impression_tags"))) {
+    currentRows = currentRows.map(({ personal_rank: _r, impression_tags: _t, ...rest }) => rest);
+    res = await state.supabase.from("user_watch_status").upsert(currentRows);
+  }
+  return res;
 }
 
 async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
@@ -1178,6 +1297,7 @@ async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
       imdb_id: imdbId,
       status: localEntry.status || "unwatched",
       my_rating: localEntry.my_rating != null ? Number(localEntry.my_rating) : null,
+      personal_rank: normalizePersonalRank(localEntry.personal_rank),
       impression_tags: Array.isArray(localEntry.impression_tags) ? localEntry.impression_tags : [],
       memo: localEntry.memo ? String(localEntry.memo) : null,
       updated_at: localEntry.updated_at || new Date().toISOString(),
@@ -1193,17 +1313,13 @@ async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
 
   state.isSyncingLocalToCloud = true;
   try {
-    let { error } = await state.supabase.from("user_watch_status").upsert(pendingPayloads);
-    if (error && isMissingColumnError(error, "impression_tags")) {
-      const fallback = pendingPayloads.map(({ impression_tags: _omit, ...rest }) => rest);
-      const retry = await state.supabase.from("user_watch_status").upsert(fallback);
-      error = retry.error;
-    }
+    const { error } = await upsertWatchRowsWithColumnFallback(pendingPayloads);
     if (!error) {
       saveLocalWatchMap({});
       for (const p of pendingPayloads) {
         state.watchMap[p.imdb_id] = normalizeWatchEntry(p);
       }
+      syncPersonalRankCacheFromWatchMap(state.watchMap);
       showToast(`ブラウザに保存されていた ${pendingPayloads.length} 件の記録をクラウドへ同期しました`);
     } else {
       console.error("ローカル記録の同期エラー:", error);
@@ -1491,6 +1607,69 @@ function renderYearTabsBar() {
   bar.innerHTML = tabsHtml;
 }
 
+function getRankedMoviesList({ excludeImdbId = null } = {}) {
+  const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
+  const items = [];
+  for (const [imdbId, rawEntry] of Object.entries(state.watchMap)) {
+    if (excludeImdbId && imdbId === excludeImdbId) continue;
+    const entry = normalizeWatchEntry(rawEntry);
+    if (entry.personal_rank == null) continue;
+    const movie = movieMap.get(imdbId);
+    if (!movie) continue;
+    items.push({ movie, watch: entry, rank: entry.personal_rank });
+  }
+  items.sort((a, b) => a.rank - b.rank || (b.movie.release_year || 0) - (a.movie.release_year || 0));
+  return items;
+}
+
+function getUnrankedFiveStarMovies() {
+  const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
+  const items = [];
+  for (const [imdbId, rawEntry] of Object.entries(state.watchMap)) {
+    const entry = normalizeWatchEntry(rawEntry);
+    if (Number(entry.my_rating) === 5 && entry.personal_rank == null) {
+      const movie = movieMap.get(imdbId);
+      if (movie) items.push(movie);
+    }
+  }
+  items.sort((a, b) => (b.release_year || 0) - (a.release_year || 0) || (b.composite_score || 0) - (a.composite_score || 0));
+  return items;
+}
+
+function updateRankingNavBadges() {
+  const rankedCount = getRankedMoviesList().length;
+  const headerBadge = document.getElementById("header-ranking-count");
+  const resultsBadge = document.getElementById("results-ranking-count");
+  if (headerBadge) headerBadge.textContent = String(rankedCount);
+  if (resultsBadge) resultsBadge.textContent = String(rankedCount);
+
+  const headerBtn = document.getElementById("toggle-ranking-btn");
+  const resultsBtn = document.getElementById("results-ranking-btn");
+  const isRanking = state.activeMainView === "ranking";
+  if (headerBtn) {
+    headerBtn.classList.toggle("active", isRanking);
+    headerBtn.setAttribute("aria-pressed", String(isRanking));
+  }
+  if (resultsBtn) {
+    resultsBtn.classList.toggle("active", isRanking);
+    resultsBtn.setAttribute("aria-pressed", String(isRanking));
+  }
+}
+
+function setActiveMainView(viewName) {
+  state.activeMainView = viewName === "ranking" ? "ranking" : "browse";
+  const browseView = document.getElementById("browse-view");
+  const rankingView = document.getElementById("ranking-view");
+  if (browseView) browseView.classList.toggle("hidden", state.activeMainView !== "browse");
+  if (rankingView) rankingView.classList.toggle("hidden", state.activeMainView !== "ranking");
+  updateRankingNavBadges();
+  if (state.activeMainView === "ranking") {
+    renderRankingView();
+  } else {
+    renderMovies();
+  }
+}
+
 function updateWatchStatsSummary() {
   const el = document.getElementById("watch-stats-pill");
   if (!el) return;
@@ -1514,6 +1693,7 @@ function renderListRow(m) {
   const w = state.watchMap[m.imdb_id];
   const isWatched = w?.status === "watched";
   const isWatchlist = w?.status === "watchlist";
+  const personalRank = normalizePersonalRank(w?.personal_rank);
   const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
   const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
   const isHighMatch = matchScore >= 85;
@@ -1539,6 +1719,7 @@ function renderListRow(m) {
         <div class="list-meta-line">
           <span class="list-year-rank">${m.release_year} · #${m.year_rank}</span>
           <span class="list-match-chip">マッチ ${matchScore}%</span>
+          ${personalRank != null ? `<span class="badge badge-personal-rank">🏆 歴代${personalRank}位</span>` : ""}
           ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
         </div>
         <h2 class="list-title">${escapeHtml(m.title_ja)}</h2>
@@ -1556,9 +1737,13 @@ function renderMovies() {
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
   updateWatchStatsSummary();
+  updateRankingNavBadges();
   updateActiveFiltersBadge();
   renderYearTabsBar();
   renderTasteAnalyticsDashboard();
+  if (state.activeMainView === "ranking") {
+    renderRankingView();
+  }
 
   grid.classList.toggle("is-list-mode", state.viewMode === "list");
 
@@ -1577,6 +1762,7 @@ function renderMovies() {
       const w = state.watchMap[m.imdb_id];
       const isWatched = w?.status === "watched";
       const isWatchlist = w?.status === "watchlist";
+      const personalRank = normalizePersonalRank(w?.personal_rank);
       const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
       const slotClass = m.selection_slot === "top12" ? "slot-top12" : "slot-genre";
       const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
@@ -1593,6 +1779,8 @@ function renderMovies() {
         : isWatchlist
           ? `<span class="badge badge-status-watchlist">観たい</span>`
           : "";
+
+      const rankBadge = personalRank != null ? `<span class="badge badge-personal-rank">🏆 ${personalRank}位</span>` : "";
 
       const cardClasses = [
         "movie-card",
@@ -1632,6 +1820,7 @@ function renderMovies() {
             </div>
             ${renderMoodTags(m.mood_tags, 2)}
             <div class="providers-row">
+              ${rankBadge}
               ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
               ${statusBadge}
             </div>
@@ -1658,7 +1847,8 @@ function isMissingColumnError(error, columnName) {
 
 async function upsertWatchStatus(payload) {
   const normalized = normalizeWatchEntry(payload);
-  saveImpressionTagsCache(payload.imdb_id, payload.impression_tags);
+  saveImpressionTagsCache(payload.imdb_id, normalized.impression_tags);
+  savePersonalRankCacheEntry(payload.imdb_id, normalized.personal_rank);
   state.watchMap[payload.imdb_id] = normalized;
 
   if (state.isDemo) {
@@ -1672,13 +1862,17 @@ async function upsertWatchStatus(payload) {
     return { error: null, mode: "local" };
   }
 
-  let { error } = await state.supabase.from("user_watch_status").upsert(payload);
-  if (error && isMissingColumnError(error, "impression_tags")) {
-    const fallbackPayload = { ...payload };
-    delete fallbackPayload.impression_tags;
-    const retryRes = await state.supabase.from("user_watch_status").upsert(fallbackPayload);
-    error = retryRes.error;
-  }
+  const rowPayload = {
+    imdb_id: payload.imdb_id,
+    status: normalized.status,
+    my_rating: normalized.my_rating,
+    personal_rank: normalized.personal_rank,
+    impression_tags: normalized.impression_tags,
+    memo: normalized.memo ? String(normalized.memo) : null,
+    updated_at: normalized.updated_at || new Date().toISOString(),
+  };
+
+  const { error } = await upsertWatchRowsWithColumnFallback([rowPayload]);
 
   if (error) {
     // クラウド失敗時もローカルバックアップは保持
@@ -1693,6 +1887,106 @@ async function upsertWatchStatus(payload) {
     saveLocalWatchMap(localMap);
   }
   return { error: null, mode: "cloud" };
+}
+
+async function persistWatchEntriesBatch(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return { error: null, mode: "local" };
+  }
+
+  const nowIso = new Date().toISOString();
+  const normalizedList = entries.map((item) => {
+    const norm = normalizeWatchEntry({ ...item, updated_at: item.updated_at || nowIso });
+    saveImpressionTagsCache(norm.imdb_id, norm.impression_tags);
+    savePersonalRankCacheEntry(norm.imdb_id, norm.personal_rank);
+    state.watchMap[norm.imdb_id] = norm;
+    return norm;
+  });
+
+  if (state.isDemo) {
+    saveLocalWatchMap(state.watchMap);
+    return { error: null, mode: "local" };
+  }
+
+  if (!state.userEmail) {
+    const localMap = loadLocalWatchMap();
+    for (const norm of normalizedList) {
+      localMap[norm.imdb_id] = norm;
+    }
+    saveLocalWatchMap(localMap);
+    return { error: null, mode: "local" };
+  }
+
+  const payloads = normalizedList.map((norm) => ({
+    imdb_id: norm.imdb_id,
+    status: norm.status,
+    my_rating: norm.my_rating,
+    personal_rank: norm.personal_rank,
+    impression_tags: norm.impression_tags,
+    memo: norm.memo ? String(norm.memo) : null,
+    updated_at: norm.updated_at,
+  }));
+
+  const { error } = await upsertWatchRowsWithColumnFallback(payloads);
+  if (error) {
+    const localMap = loadLocalWatchMap();
+    for (const norm of normalizedList) {
+      localMap[norm.imdb_id] = norm;
+    }
+    saveLocalWatchMap(localMap);
+    return { error, mode: "error" };
+  }
+
+  const localMap = loadLocalWatchMap();
+  let modifiedLocal = false;
+  for (const norm of normalizedList) {
+    if (localMap[norm.imdb_id]) {
+      delete localMap[norm.imdb_id];
+      modifiedLocal = true;
+    }
+  }
+  if (modifiedLocal) {
+    saveLocalWatchMap(localMap);
+  }
+  return { error: null, mode: "cloud" };
+}
+
+async function applyRankedOrder(orderedImdbIds, removedImdbIds = []) {
+  const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
+  const updatedEntries = [];
+  const nowIso = new Date().toISOString();
+
+  orderedImdbIds.forEach((imdbId, idx) => {
+    if (!movieMap.has(imdbId)) return;
+    const prev = normalizeWatchEntry(state.watchMap[imdbId]);
+    const nextStatus = prev.status === "watched" ? "watched" : "watched";
+    const nextRank = idx + 1;
+    updatedEntries.push({
+      ...prev,
+      imdb_id: imdbId,
+      status: nextStatus,
+      personal_rank: nextRank,
+      updated_at: nowIso,
+    });
+  });
+
+  for (const imdbId of removedImdbIds) {
+    const prev = normalizeWatchEntry(state.watchMap[imdbId]);
+    updatedEntries.push({
+      ...prev,
+      imdb_id: imdbId,
+      personal_rank: null,
+      updated_at: nowIso,
+    });
+  }
+
+  for (const entry of updatedEntries) {
+    state.watchMap[entry.imdb_id] = normalizeWatchEntry(entry);
+    savePersonalRankCacheEntry(entry.imdb_id, entry.personal_rank);
+  }
+
+  renderMovies();
+  return persistWatchEntriesBatch(updatedEntries);
 }
 
 function notifyLocalSaveOnce() {
@@ -1736,6 +2030,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     imdb_id: imdbId,
     status: nextStatus,
     my_rating: nextRating,
+    personal_rank: prev.personal_rank,
     impression_tags: prev.impression_tags || [],
     memo: prev.memo ? prev.memo : null,
     updated_at: new Date().toISOString(),
@@ -1746,6 +2041,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
   if (state.isDemo || !state.userEmail) {
     saveLocalWatchEntry(imdbId, payload);
   }
+  savePersonalRankCacheEntry(imdbId, payload.personal_rank);
   renderMovies();
 
   const { error, mode } = await upsertWatchStatus(payload);
@@ -1758,8 +2054,354 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     return;
   }
 
+  // ★5ワンタッチ評価時は控えめなアクション付きトーストで2択バトルへの導線を表示
+  if (action === "rate" && nextRating === 5) {
+    const movie = state.movies.find((m) => m.imdb_id === imdbId);
+    const title = movie ? movie.title_ja : "この作品";
+    showToast(`『${title}』を★5にしました`, {
+      actionLabel: "⚔️ 順位を決める",
+      onAction: () => startBattleForMovie(imdbId),
+      durationMs: 6000,
+    });
+    return;
+  }
+
   if (mode === "local") {
     notifyLocalSaveOnce();
+  }
+}
+
+/* ============================================================================
+   ⚔️ 2択バトル（二分探索）ランキングモーダル
+   ============================================================================ */
+
+function buildBattleCardHtml(movie, roleLabel, roleSub, sideKey, rankBadgeText = null) {
+  const posterHtml = movie.poster_url
+    ? `<img class="battle-poster" src="${escapeHtml(movie.poster_url)}" alt="${escapeHtml(movie.title_ja)}" />`
+    : `<div class="battle-poster-fallback"><strong>${escapeHtml(movie.title_ja)}</strong><span>${escapeHtml(movie.title_en)}</span></div>`;
+
+  const w = normalizeWatchEntry(state.watchMap[movie.imdb_id]);
+  const ratingChip = w.my_rating != null ? `<span class="battle-star-chip">★${w.my_rating}</span>` : "";
+
+  return `
+    <div class="battle-card ${sideKey === "challenger" ? "battle-card-challenger" : "battle-card-opponent"}">
+      <div class="battle-card-role-row">
+        <span class="battle-role-badge">${escapeHtml(roleLabel)}</span>
+        ${rankBadgeText ? `<span class="battle-rank-pill">${escapeHtml(rankBadgeText)}</span>` : ""}
+      </div>
+      <div class="battle-poster-box">${posterHtml}</div>
+      <div class="battle-card-info">
+        <h3 class="battle-card-title">${escapeHtml(movie.title_ja)}</h3>
+        <div class="battle-card-meta">${movie.release_year || ""}年${movie.director ? ` / ${escapeHtml(movie.director)}` : ""}</div>
+        <div class="battle-card-sub">
+          ${ratingChip}
+          ${roleSub ? `<span class="battle-role-sub">${escapeHtml(roleSub)}</span>` : ""}
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary battle-pick-btn" data-battle-pick="${sideKey}">👆 こっちが上！</button>
+    </div>
+  `;
+}
+
+function renderBattleModal() {
+  const b = state.battle;
+  const body = document.getElementById("battle-modal-body");
+  if (!b || !body) return;
+
+  const target = b.targetMovie;
+  const queueRemaining = b.queue.length;
+
+  if (b.phase === "result") {
+    const nextMovie = queueRemaining > 0 ? b.queue[0] : null;
+    const posterHtml = target.poster_url
+      ? `<img class="battle-result-poster" src="${escapeHtml(target.poster_url)}" alt="${escapeHtml(target.title_ja)}" />`
+      : `<div class="battle-poster-fallback battle-result-poster"><strong>${escapeHtml(target.title_ja)}</strong></div>`;
+
+    body.innerHTML = `
+      <div class="modal-header battle-modal-header">
+        <div>
+          <h2>⚔️ 2択バトル結果</h2>
+          <p class="battle-subtitle">歴代マイランキングを更新しました</p>
+        </div>
+        <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">✕</button>
+      </div>
+      <div class="battle-result-box">
+        <div class="battle-result-crown">🏆 歴代 ${b.decidedRank}位 に決定！</div>
+        <div class="battle-result-movie">
+          ${posterHtml}
+          <div class="battle-result-info">
+            <h3>${escapeHtml(target.title_ja)}</h3>
+            <p>${target.release_year}年 / 監督: ${escapeHtml(target.director || "不明")}</p>
+            <p class="battle-result-total">現在 ${getRankedMoviesList().length}作品がランクイン中</p>
+          </div>
+        </div>
+        <div class="battle-result-actions">
+          ${
+            nextMovie
+              ? `<button type="button" class="btn btn-primary" data-battle-next="true">⚔️ 次の作品の順位を決める (残り${queueRemaining}本)</button>`
+              : ""
+          }
+          <button type="button" class="btn btn-secondary" data-battle-open-ranking="true">🏆 マイランキングを見る</button>
+          <button type="button" class="btn btn-ghost" data-close-modal="battle-modal">閉じる</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const mid = Math.floor((b.low + b.high) / 2);
+  const opponentEntry = b.ranked[mid];
+  const opponent = opponentEntry.movie;
+  const estRemaining = Math.max(1, Math.ceil(Math.log2(b.high - b.low + 1)));
+
+  body.innerHTML = `
+    <div class="modal-header battle-modal-header">
+      <div>
+        <h2>⚔️ 2択バトル（どっちが上？）</h2>
+        <div class="battle-progress-bar">
+          <span class="battle-progress-chip">第 ${b.step} 戦</span>
+          <span class="battle-progress-chip battle-progress-remain">あと最大 ${estRemaining} 回で決定</span>
+          ${queueRemaining > 0 ? `<span class="battle-progress-chip battle-progress-queue">連続待機 残り${queueRemaining}本</span>` : ""}
+        </div>
+      </div>
+      <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">✕</button>
+    </div>
+
+    <div class="battle-arena">
+      ${buildBattleCardHtml(target, "挑戦者", "今回順位を決める", "challenger", `現在 ${b.low + 1}〜${b.high + 1}位 付近`)}
+      <div class="battle-vs-divider" aria-hidden="true"><span>VS</span></div>
+      ${buildBattleCardHtml(opponent, "対戦相手", "ランク済み作品", "opponent", `暫定 ${mid + 1}位`)}
+    </div>
+
+    <div class="battle-modal-footer">
+      <span class="battle-hint">※ 選んだ方がより上位（1位側）になります</span>
+      <button type="button" class="btn btn-ghost" data-close-modal="battle-modal">中断して閉じる</button>
+    </div>
+  `;
+}
+
+async function finalizeBattlePlacement(insertIndex) {
+  const b = state.battle;
+  if (!b || b.isSaving) return;
+  b.isSaving = true;
+
+  const newOrderIds = b.ranked.map((item) => item.movie.imdb_id);
+  newOrderIds.splice(insertIndex, 0, b.targetMovie.imdb_id);
+
+  b.decidedRank = insertIndex + 1;
+  b.phase = "result";
+
+  // 参加時にwatchedでなければ自動でwatchedに昇格させたうえで連番保存
+  const prevTarget = normalizeWatchEntry(state.watchMap[b.targetMovie.imdb_id]);
+  state.watchMap[b.targetMovie.imdb_id] = normalizeWatchEntry({
+    ...prevTarget,
+    imdb_id: b.targetMovie.imdb_id,
+    status: "watched",
+    personal_rank: b.decidedRank,
+  });
+
+  renderBattleModal();
+  const { error } = await applyRankedOrder(newOrderIds);
+  b.isSaving = false;
+  if (error) {
+    showToast(`クラウド同期に失敗（ブラウザに保存済み）: ${error.message}`);
+  }
+}
+
+async function handleBattleChoice(sideKey) {
+  const b = state.battle;
+  if (!b || b.phase !== "compare" || b.isSaving) return;
+
+  const mid = Math.floor((b.low + b.high) / 2);
+  if (sideKey === "challenger") {
+    b.high = mid;
+  } else if (sideKey === "opponent") {
+    b.low = mid + 1;
+  } else {
+    return;
+  }
+
+  if (b.low >= b.high) {
+    await finalizeBattlePlacement(b.low);
+  } else {
+    b.step += 1;
+    renderBattleModal();
+  }
+}
+
+function startBattleForMovie(imdbId, queueIds = []) {
+  const targetMovie = state.movies.find((m) => m.imdb_id === imdbId);
+  if (!targetMovie) return;
+
+  // 既存のランク済み作品（対象映画自身を除く）を昇順取得し、1..Nとして扱う
+  const ranked = getRankedMoviesList({ excludeImdbId: imdbId });
+  const remainingQueue = (Array.isArray(queueIds) ? queueIds : [])
+    .filter((id) => id && id !== imdbId)
+    .map((id) => state.movies.find((m) => m.imdb_id === id))
+    .filter(Boolean);
+
+  const n = ranked.length;
+  state.battle = {
+    targetMovie,
+    ranked,
+    low: 0,
+    high: n,
+    step: 1,
+    totalEstimatedSteps: n > 0 ? Math.max(1, Math.ceil(Math.log2(n + 1))) : 0,
+    queue: remainingQueue,
+    phase: n === 0 ? "result" : "compare",
+    decidedRank: 1,
+    isSaving: false,
+  };
+
+  const modal = document.getElementById("battle-modal");
+  if (modal && !modal.open) {
+    modal.showModal();
+  }
+
+  if (n === 0) {
+    finalizeBattlePlacement(0);
+  } else {
+    renderBattleModal();
+  }
+}
+
+function startBatchFiveStarBattle() {
+  const unranked = getUnrankedFiveStarMovies();
+  if (unranked.length === 0) {
+    showToast("未ランクの★5作品はありません。");
+    return;
+  }
+  const [first, ...rest] = unranked;
+  startBattleForMovie(
+    first.imdb_id,
+    rest.map((m) => m.imdb_id)
+  );
+}
+
+/* ============================================================================
+   🏆 マイランキング ビュー
+   ============================================================================ */
+
+function renderRankingView() {
+  const rankedList = getRankedMoviesList();
+  const unrankedFiveStars = getUnrankedFiveStarMovies();
+
+  const subtitleEl = document.getElementById("ranking-subtitle");
+  if (subtitleEl) {
+    subtitleEl.textContent =
+      rankedList.length > 0
+        ? `現在 ${rankedList.length}作品を順位付け済み（↑↓で微調整・⚔️ 再戦で順位を決め直せます）`
+        : "まだランクインした作品がありません。★5評価や詳細画面から2択バトルで順位を決めましょう！";
+  }
+
+  const bannerEl = document.getElementById("ranking-unranked-banner");
+  if (bannerEl) {
+    if (unrankedFiveStars.length > 0) {
+      bannerEl.classList.remove("hidden");
+      bannerEl.innerHTML = `
+        <div class="ranking-banner-text">
+          <span class="ranking-banner-badge">★5</span>
+          <span>未ランクの★5が <strong>${unrankedFiveStars.length}本</strong> あります</span>
+        </div>
+        <button id="start-batch-battle-btn" type="button" class="btn btn-primary">⚔️ まとめて順位を決める</button>
+      `;
+    } else {
+      bannerEl.classList.add("hidden");
+      bannerEl.innerHTML = "";
+    }
+  }
+
+  const listEl = document.getElementById("ranking-list");
+  if (!listEl) return;
+
+  if (rankedList.length === 0) {
+    listEl.innerHTML = `
+      <div class="ranking-empty-card">
+        <div class="ranking-empty-icon">🏆</div>
+        <h3>マイランキングはまだ空です</h3>
+        <p>映画カードで <strong>★5</strong> をタップしてトーストの <code>⚔️ 順位を決める</code> を押すか、詳細モーダルから任意の映画をランキングに参加させられます。</p>
+        <button type="button" class="btn btn-secondary" data-ranking-go-browse="true">← 映画一覧で★5を付ける</button>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = rankedList
+    .map(({ movie: m, watch: w }, idx) => {
+      const displayRank = idx + 1;
+      const tierClass =
+        displayRank === 1 ? "rank-tier-1" : displayRank === 2 ? "rank-tier-2" : displayRank === 3 ? "rank-tier-3" : "rank-tier-other";
+      const rankText = displayRank === 1 ? "👑 1位" : `${displayRank}位`;
+      const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
+      const tags = w.impression_tags || [];
+      const isFirst = idx === 0;
+      const isLast = idx === rankedList.length - 1;
+
+      return `
+        <article class="ranking-row ${tierClass}" data-imdb-id="${escapeHtml(m.imdb_id)}">
+          <div class="ranking-rank-badge ${tierClass}">${rankText}</div>
+          <button type="button" class="ranking-thumb-btn" data-ranking-detail="${escapeHtml(m.imdb_id)}" aria-label="${escapeHtml(m.title_ja)}の詳細を開く">
+            ${
+              m.poster_url
+                ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
+                : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
+            }
+          </button>
+          <div class="ranking-row-main" data-ranking-detail="${escapeHtml(m.imdb_id)}">
+            <div class="ranking-row-title-line">
+              <h3 class="ranking-row-title">${escapeHtml(m.title_ja)}</h3>
+              ${w.my_rating != null ? `<span class="ranking-star-pill">★${w.my_rating}</span>` : ""}
+            </div>
+            <div class="ranking-row-meta">${m.release_year}年${m.director ? ` / 監督: ${escapeHtml(m.director)}` : ""}${m.runtime_minutes ? ` / ${m.runtime_minutes}分` : ""}</div>
+            <div class="ranking-row-chips">
+              ${tags.map((t) => `<span class="ranking-imp-chip">${escapeHtml(t)}</span>`).join("")}
+              ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
+            </div>
+          </div>
+          <div class="ranking-row-actions">
+            <div class="ranking-move-btns">
+              <button type="button" class="btn btn-secondary ranking-act-btn" data-rank-action="up" data-imdb-id="${escapeHtml(m.imdb_id)}" ${isFirst ? "disabled" : ""} title="1つ上へ">↑</button>
+              <button type="button" class="btn btn-secondary ranking-act-btn" data-rank-action="down" data-imdb-id="${escapeHtml(m.imdb_id)}" ${isLast ? "disabled" : ""} title="1つ下へ">↓</button>
+            </div>
+            <button type="button" class="btn btn-secondary ranking-act-btn" data-rank-action="rebattle" data-imdb-id="${escapeHtml(m.imdb_id)}" title="2択バトルで順位を決め直す">⚔️ 再戦</button>
+            <button type="button" class="btn btn-ghost ranking-act-btn ranking-remove-btn" data-rank-action="remove" data-imdb-id="${escapeHtml(m.imdb_id)}" title="ランキングから外す（★評価は保持）">外す</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function handleRankingRowAction(action, imdbId) {
+  const rankedList = getRankedMoviesList();
+  const orderedIds = rankedList.map((item) => item.movie.imdb_id);
+  const idx = orderedIds.indexOf(imdbId);
+
+  if (action === "up") {
+    if (idx <= 0) return;
+    [orderedIds[idx - 1], orderedIds[idx]] = [orderedIds[idx], orderedIds[idx - 1]];
+    await applyRankedOrder(orderedIds);
+    return;
+  }
+
+  if (action === "down") {
+    if (idx < 0 || idx >= orderedIds.length - 1) return;
+    [orderedIds[idx], orderedIds[idx + 1]] = [orderedIds[idx + 1], orderedIds[idx]];
+    await applyRankedOrder(orderedIds);
+    return;
+  }
+
+  if (action === "rebattle") {
+    startBattleForMovie(imdbId);
+    return;
+  }
+
+  if (action === "remove") {
+    if (idx < 0) return;
+    orderedIds.splice(idx, 1);
+    await applyRankedOrder(orderedIds, [imdbId]);
+    showToast("マイランキングから外しました（★評価と視聴済みステータスは保持）");
   }
 }
 
@@ -1772,6 +2414,7 @@ function openMovieModal(imdbId) {
   const canWrite = true;
   const userSignals = buildUserPreferenceSignals();
   const matchScore = computeMatchScore(m, state.tasteProfile, userSignals);
+  const currentRank = normalizePersonalRank(w.personal_rank);
 
   const modal = document.getElementById("movie-modal");
   const hasBackdrop = Boolean(m.backdrop_url);
@@ -1799,6 +2442,9 @@ function openMovieModal(imdbId) {
     ? `<span class="watch-sync-hint">☁️ クラウド同期ON</span>`
     : `<span class="watch-sync-hint">💾 ブラウザ保存（ログインでクラウド同期）</span>`;
 
+  const battleBtnLabel =
+    currentRank != null ? `🏆 現在 ${currentRank}位（⚔️ 再戦する）` : "⚔️ 順位を決める";
+
   document.getElementById("modal-body").innerHTML = `
     ${backdropBanner}
     <div style="${hasBackdrop ? "padding:16px 20px 20px" : ""}">
@@ -1821,6 +2467,7 @@ function openMovieModal(imdbId) {
         <div>
           <div class="metrics-row">
             <span class="metric-chip metric-match">自分マッチ度 ${matchScore}%</span>
+            ${currentRank != null ? `<span class="metric-chip metric-rank">🏆 歴代 ${currentRank}位</span>` : ""}
             <span class="metric-chip">総合 ${Number(m.composite_score).toFixed(1)}点</span>
             <span class="metric-chip">IMDb ${m.imdb_rating ?? "-"}</span>
             <span class="metric-chip">Metascore ${m.metascore ?? "-"}</span>
@@ -1874,6 +2521,7 @@ function openMovieModal(imdbId) {
             <option value="">自分評価なし</option>
             ${[5, 4, 3, 2, 1].map((n) => `<option value="${n}" ${Number(w.my_rating) === n ? "selected" : ""}>★${n}</option>`).join("")}
           </select>
+          <button id="modal-battle-btn" type="button" class="btn btn-secondary modal-battle-btn" data-imdb-id="${escapeHtml(imdbId)}">${escapeHtml(battleBtnLabel)}</button>
         </div>
 
         <div class="impression-section">
@@ -1911,14 +2559,37 @@ function openMovieModal(imdbId) {
     });
   });
 
+  const battleBtn = document.getElementById("modal-battle-btn");
+  if (battleBtn) {
+    battleBtn.addEventListener("click", async () => {
+      const ratingVal = document.getElementById("modal-rating").value;
+      const ensuredStatus = "watched";
+      const payload = {
+        imdb_id: imdbId,
+        status: ensuredStatus,
+        my_rating: ratingVal ? Number(ratingVal) : w.my_rating,
+        personal_rank: currentRank,
+        impression_tags: [...selectedImpressionSet],
+        memo: document.getElementById("modal-memo").value.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+      await upsertWatchStatus(payload);
+      modal.close();
+      renderMovies();
+      startBattleForMovie(imdbId);
+    });
+  }
+
   const saveBtn = document.getElementById("save-watch-btn");
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       const ratingVal = document.getElementById("modal-rating").value;
+      const latestEntry = normalizeWatchEntry(state.watchMap[imdbId]);
       const payload = {
         imdb_id: imdbId,
         status: selectedStatus,
         my_rating: ratingVal ? Number(ratingVal) : null,
+        personal_rank: latestEntry.personal_rank,
         impression_tags: [...selectedImpressionSet],
         memo: document.getElementById("modal-memo").value.trim() || null,
         updated_at: new Date().toISOString(),
@@ -2019,6 +2690,7 @@ function buildTasteExportText() {
   const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
   const watchedItems = [];
   const watchlistItems = [];
+  const rankedItems = getRankedMoviesList();
 
   for (const [imdbId, rawEntry] of Object.entries(state.watchMap)) {
     const entry = normalizeWatchEntry(rawEntry);
@@ -2041,13 +2713,23 @@ function buildTasteExportText() {
     return `- ${movie.title_ja} (${movie.release_year}) / 監督: ${movie.director || "不明"} / ジャンル: ${genresStr} / ${ratingStr}${tagsStr}${memoStr}`;
   };
 
+  const formatRankLine = ({ movie, watch }, idx) => {
+    const rankNum = idx + 1;
+    const ratingStr = watch.my_rating != null ? `★${watch.my_rating}` : "未評価";
+    const tagsStr = watch.impression_tags?.length ? ` [${watch.impression_tags.join("・")}]` : "";
+    return `${rankNum}位: 『${movie.title_ja}』 (${movie.release_year} / ${movie.director || "不明"}) ${ratingStr}${tagsStr}`;
+  };
+
   const lines = [
     "あなたは私の映画の好みを深く理解するパーソナル映画キュレーターです。",
-    "以下の「現在の視聴・評価履歴」と「現在の taste_profile.json」を分析し、",
+    "以下の「マイランキング」「現在の視聴・評価履歴」「現在の taste_profile.json」を分析し、",
     "1) 私の好みの傾向（刺さる演出・ジャンル・監督・避けがちな要素）の言語化",
     "2) 次に観るべきおすすめ作品の提案",
     "3) 更新版 web/taste_profile.json の提案（そのままコピペできるJSON形式）",
     "を出力してください。",
+    "",
+    `## 🏆 マイランキング（歴代ベスト順位 / ${rankedItems.length}件）`,
+    rankedItems.length > 0 ? rankedItems.map(formatRankLine).join("\n") : "- （まだ順位付けされた作品はありません）",
     "",
     `## 視聴済み・評価済み作品（${watchedItems.length}件）`,
     watchedItems.length > 0 ? watchedItems.map(formatLine).join("\n") : "- （まだ記録がありません）",
@@ -2145,6 +2827,62 @@ function bindEvents() {
     });
   }
 
+  const toggleRankingView = () => {
+    setActiveMainView(state.activeMainView === "ranking" ? "browse" : "ranking");
+  };
+  document.getElementById("toggle-ranking-btn")?.addEventListener("click", toggleRankingView);
+  document.getElementById("results-ranking-btn")?.addEventListener("click", toggleRankingView);
+  document.getElementById("ranking-back-btn")?.addEventListener("click", () => setActiveMainView("browse"));
+
+  const rankingView = document.getElementById("ranking-view");
+  if (rankingView) {
+    rankingView.addEventListener("click", (e) => {
+      if (e.target.closest("#start-batch-battle-btn")) {
+        startBatchFiveStarBattle();
+        return;
+      }
+      if (e.target.closest("[data-ranking-go-browse]")) {
+        setActiveMainView("browse");
+        return;
+      }
+      const actionBtn = e.target.closest("[data-rank-action]");
+      if (actionBtn) {
+        e.stopPropagation();
+        handleRankingRowAction(actionBtn.dataset.rankAction, actionBtn.dataset.imdbId);
+        return;
+      }
+      const detailTarget = e.target.closest("[data-ranking-detail]");
+      if (detailTarget) {
+        openMovieModal(detailTarget.dataset.rankingDetail);
+      }
+    });
+  }
+
+  const battleModalBody = document.getElementById("battle-modal-body");
+  if (battleModalBody) {
+    battleModalBody.addEventListener("click", (e) => {
+      const pickBtn = e.target.closest("[data-battle-pick]");
+      if (pickBtn) {
+        handleBattleChoice(pickBtn.dataset.battlePick);
+        return;
+      }
+      const nextBtn = e.target.closest("[data-battle-next]");
+      if (nextBtn && state.battle?.queue?.length > 0) {
+        const [nextMovie, ...rest] = state.battle.queue;
+        startBattleForMovie(
+          nextMovie.imdb_id,
+          rest.map((m) => m.imdb_id)
+        );
+        return;
+      }
+      const openRankingBtn = e.target.closest("[data-battle-open-ranking]");
+      if (openRankingBtn) {
+        document.getElementById("battle-modal")?.close();
+        setActiveMainView("ranking");
+      }
+    });
+  }
+
   const yearTabsBar = document.getElementById("year-tabs-bar");
   if (yearTabsBar) {
     yearTabsBar.addEventListener("click", (e) => {
@@ -2212,6 +2950,7 @@ function bindEvents() {
 
       const genreBtn = e.target.closest("[data-filter-genre]");
       if (genreBtn) {
+        setActiveMainView("browse");
         resetAllFilterControls({ preserveSavedPrefs: true });
         document.getElementById("filter-genre").value = genreBtn.dataset.filterGenre;
         document.getElementById("filter-sort").value = "match_desc";
@@ -2221,6 +2960,7 @@ function bindEvents() {
 
       const queryBtn = e.target.closest("[data-filter-query]");
       if (queryBtn) {
+        setActiveMainView("browse");
         resetAllFilterControls({ preserveSavedPrefs: true });
         document.getElementById("filter-query").value = queryBtn.dataset.filterQuery;
         renderMovies();
@@ -2229,6 +2969,7 @@ function bindEvents() {
 
       const presetLinkBtn = e.target.closest("[data-apply-preset]");
       if (presetLinkBtn) {
+        setActiveMainView("browse");
         const preset = presetLinkBtn.dataset.applyPreset;
         if (state.activePreset !== preset) {
           applyPreset(preset);

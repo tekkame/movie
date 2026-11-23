@@ -175,6 +175,76 @@ class TestExportTasteStats(unittest.TestCase):
         self.assertIn("| 脚本・構成 | 2 | 2 | 4.50 |", md)
         self.assertIn("パラサイト (2019)", md)
         self.assertIn("メッセージ (2016)", md)
+        self.assertIn("## 🏆 マイランキング（1位〜）", md)
+        self.assertIn("マイランキングはまだありません", md)
+
+    def test_my_ranking_aggregation_and_markdown(self) -> None:
+        movies = [
+            {
+                "imdb_id": "tt001",
+                "title_ja": "パラサイト",
+                "title_en": "Parasite",
+                "release_year": 2019,
+                "genres": ["Drama", "Thriller"],
+                "director": "Bong Joon Ho",
+                "composite_score": 93.0,
+            },
+            {
+                "imdb_id": "tt002",
+                "title_ja": "セブン",
+                "title_en": "Se7en",
+                "release_year": 1995,
+                "genres": ["Crime", "Thriller"],
+                "director": "David Fincher",
+                "composite_score": 82.0,
+            },
+            {
+                "imdb_id": "tt003",
+                "title_ja": "メッセージ",
+                "title_en": "Arrival",
+                "release_year": 2016,
+                "genres": ["Sci-Fi", "Drama"],
+                "director": "Denis Villeneuve",
+                "composite_score": 85.4,
+            },
+        ]
+        watch_rows = [
+            {
+                "imdb_id": "tt002",
+                "status": "watched",
+                "my_rating": 5,
+                "personal_rank": 2,
+                "impression_tags": ["映像・演出"],
+                "memo": "雨が不穏",
+            },
+            {
+                "imdb_id": "tt001",
+                "status": "watched",
+                "my_rating": 5,
+                "personal_rank": 1,
+                "impression_tags": ["脚本・構成", "没入感・テンポ"],
+                "memo": "",
+            },
+            {
+                "imdb_id": "tt003",
+                "status": "watched",
+                "my_rating": 4,
+                "personal_rank": None,
+                "impression_tags": [],
+                "memo": "",
+            },
+        ]
+
+        stats = export_taste_stats.aggregate_taste_stats(movies, watch_rows)
+        self.assertEqual(stats["summary"]["ranked_count"], 2)
+        self.assertEqual([r["imdb_id"] for r in stats["ranked_items"]], ["tt001", "tt002"])
+
+        md = export_taste_stats.render_markdown_report(stats)
+        self.assertIn("マイランキング登録済み: 2本", md)
+        self.assertIn("## 🏆 マイランキング（1位〜）", md)
+        idx_1 = md.index("- 1位: 『パラサイト』 (2019 / Bong Joon Ho) ★5 [脚本・構成・没入感・テンポ]")
+        idx_2 = md.index("- 2位: 『セブン』 (1995 / David Fincher) ★5 [映像・演出] | メモ: 雨が不穏")
+        self.assertLess(idx_1, idx_2)
 
 
 if __name__ == "__main__":
