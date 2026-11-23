@@ -32,11 +32,14 @@ CREATE TABLE IF NOT EXISTS public.movies (
   awards_text        TEXT,
   awards_bonus       NUMERIC(4, 1) NOT NULL DEFAULT 0,
   jp_providers       JSONB NOT NULL DEFAULT '{"flatrate": [], "rent": [], "buy": [], "link": null}'::jsonb,
-  overview_ja        TEXT,
+  overview_ja              TEXT,
+  country                  TEXT,
+  newly_flatrate_providers TEXT[] DEFAULT '{}',
+  newly_flatrate_at        TIMESTAMPTZ,
   -- Phase 2: 自宅PCのローカルLLMが後から同期するカラム（Phase 1ではNULL）
-  ai_summary         TEXT,
-  mood_tags          TEXT[] DEFAULT '{}',
-  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  ai_summary               TEXT,
+  mood_tags                TEXT[] DEFAULT '{}',
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_movies_year_rank
@@ -72,16 +75,29 @@ CREATE TABLE IF NOT EXISTS public.user_watch_status (
   status          TEXT NOT NULL DEFAULT 'unwatched' CHECK (status IN ('unwatched', 'watchlist', 'watched')),
   my_rating       SMALLINT CHECK (my_rating IS NULL OR (my_rating >= 1 AND my_rating <= 5)),
   personal_rank   INTEGER,
+  watched_at      DATE,
   impression_tags TEXT[] DEFAULT '{}',
   memo            TEXT,
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS country TEXT;
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS newly_flatrate_providers TEXT[] DEFAULT '{}';
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS newly_flatrate_at TIMESTAMPTZ;
 
 ALTER TABLE public.user_watch_status
   ADD COLUMN IF NOT EXISTS impression_tags TEXT[] DEFAULT '{}';
 
 ALTER TABLE public.user_watch_status
   ADD COLUMN IF NOT EXISTS personal_rank INTEGER;
+
+ALTER TABLE public.user_watch_status
+  ADD COLUMN IF NOT EXISTS watched_at DATE;
 
 CREATE INDEX IF NOT EXISTS idx_user_watch_status_personal_rank
   ON public.user_watch_status (personal_rank ASC)

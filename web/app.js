@@ -8,6 +8,9 @@ const DEMO_MOVIES = [
     title_ja: "罪人たち",
     title_en: "Sinners",
     original_language: "en",
+    country: "United States",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 137,
@@ -41,6 +44,9 @@ const DEMO_MOVIES = [
     title_ja: "パラサイト 半地下の家族",
     title_en: "Parasite",
     original_language: "ko",
+    country: "South Korea",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 132,
@@ -74,6 +80,9 @@ const DEMO_MOVIES = [
     title_ja: "メッセージ",
     title_en: "Arrival",
     original_language: "en",
+    country: "United States, Canada",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 116,
@@ -107,6 +116,9 @@ const DEMO_MOVIES = [
     title_ja: "千と千尋の神隠し",
     title_en: "Spirited Away",
     original_language: "ja",
+    country: "Japan",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 125,
@@ -140,6 +152,9 @@ const DEMO_MOVIES = [
     title_ja: "スパイダーマン：スパイダーバース",
     title_en: "Spider-Man: Into the Spider-Verse",
     original_language: "en",
+    country: "United States",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 117,
@@ -173,6 +188,9 @@ const DEMO_MOVIES = [
     title_ja: "セブン",
     title_en: "Se7en",
     original_language: "en",
+    country: "United States",
+    newly_flatrate_providers: [],
+    newly_flatrate_at: null,
     poster_url: null,
     backdrop_url: null,
     runtime_minutes: 127,
@@ -227,6 +245,7 @@ const IMPRESSION_TAG_GROUPS = [
 
 const IMPRESSION_TAGS_CACHE_KEY = "core_cinema_impression_tags_cache";
 const PERSONAL_RANK_CACHE_KEY = "core_cinema_personal_rank_cache";
+const WATCHED_AT_CACHE_KEY = "core_cinema_watched_at_cache";
 const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
 const TASTE_PANEL_OPEN_KEY = "core_cinema_taste_panel_open_v3";
 const FILTER_PREFS_STORAGE_KEY = "core_cinema_filter_prefs_v3";
@@ -239,16 +258,22 @@ const state = {
   userEmail: null,
   movies: [],
   filteredMovies: [],
-  watchMap: {}, // imdb_id -> { status, my_rating, personal_rank, impression_tags, memo, updated_at }
+  countryMap: {},
+  watchMap: {}, // imdb_id -> { status, my_rating, personal_rank, watched_at, impression_tags, memo, updated_at }
   tasteProfile: { ...DEFAULT_TASTE_PROFILE },
   activePreset: null,
   presetGenres: null, // 例: ["Horror", "Thriller"] (プリセット用ORマッチ)
+  newlyFlatrateFilterActive: false,
+  newlyFlatrateBannerDismissed: false,
   isSyncingLocalToCloud: false,
   hasShownOfflineSaveHint: false,
+  hasShownMissingColumnHint: false,
   activeTasteTab: "taste", // "taste" | "guide"
   isTastePanelOpen: false,
   viewMode: "card", // "card" | "list"
   activeMainView: "browse", // "browse" | "ranking"
+  activeRankingTab: "best", // "best" | "log"
+  selectedLogYear: "all",
   isMobileFiltersOpen: false,
   battle: null, // { targetMovie, ranked, low, high, step, totalEstimatedSteps, queue, phase, decidedRank, isSaving }
 };
@@ -277,6 +302,36 @@ function escapeHtml(str) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function getTodayDateString() {
+  try {
+    const parts = new Intl.DateTimeFormat("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const d = parts.find((p) => p.type === "day")?.value;
+    if (y && m && d) return `${y}-${m}-${d}`;
+  } catch {
+    // fallback below
+  }
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function normalizeWatchedAt(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  const match = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
 }
 
 function loadLocalWatchMap() {
@@ -331,6 +386,35 @@ function saveImpressionTagsCache(imdbId, tags) {
   }
 }
 
+function loadWatchedAtCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCHED_AT_CACHE_KEY) || "{}");
+    const result = {};
+    for (const [id, dtStr] of Object.entries(raw || {})) {
+      const norm = normalizeWatchedAt(dtStr);
+      if (norm) result[id] = norm;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveWatchedAtCacheEntry(imdbId, watchedAt) {
+  try {
+    const cache = loadWatchedAtCache();
+    const norm = normalizeWatchedAt(watchedAt);
+    if (norm) {
+      cache[imdbId] = norm;
+    } else {
+      delete cache[imdbId];
+    }
+    localStorage.setItem(WATCHED_AT_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore
+  }
+}
+
 function normalizePersonalRank(val) {
   if (val == null || val === "") return null;
   const num = Number(val);
@@ -382,12 +466,27 @@ function syncPersonalRankCacheFromWatchMap(watchMapObj = state.watchMap) {
   }
 }
 
+function syncLocalStorageBackupsForWatchMap(watchMapObj = state.watchMap) {
+  syncPersonalRankCacheFromWatchMap(watchMapObj);
+  try {
+    const watchedAtCache = {};
+    for (const [id, entry] of Object.entries(watchMapObj || {})) {
+      const norm = normalizeWatchedAt(entry?.watched_at);
+      if (norm) watchedAtCache[id] = norm;
+    }
+    localStorage.setItem(WATCHED_AT_CACHE_KEY, JSON.stringify(watchedAtCache));
+  } catch {
+    // ignore
+  }
+}
+
 function normalizeWatchEntry(row) {
   if (!row) {
     return {
       status: "unwatched",
       my_rating: null,
       personal_rank: null,
+      watched_at: null,
       impression_tags: [],
       memo: "",
       updated_at: null,
@@ -398,6 +497,7 @@ function normalizeWatchEntry(row) {
     status: row.status || "unwatched",
     my_rating: row.my_rating != null ? Number(row.my_rating) : null,
     personal_rank: normalizePersonalRank(row.personal_rank),
+    watched_at: normalizeWatchedAt(row.watched_at),
     impression_tags: Array.isArray(row.impression_tags) ? row.impression_tags.filter(Boolean) : [],
     memo: row.memo || "",
     updated_at: row.updated_at || null,
@@ -410,9 +510,24 @@ function isMeaningfulWatchEntry(entry) {
     (entry.status && entry.status !== "unwatched") ||
     entry.my_rating != null ||
     normalizePersonalRank(entry.personal_rank) != null ||
+    normalizeWatchedAt(entry.watched_at) != null ||
     (Array.isArray(entry.impression_tags) && entry.impression_tags.length > 0) ||
     Boolean(entry.memo && String(entry.memo).trim())
   );
+}
+
+function applyCachedFieldsToEntry(imdbId, entry, { tagsCache, rankCache, watchedAtCache }) {
+  const norm = normalizeWatchEntry(entry);
+  if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[imdbId])) {
+    norm.impression_tags = tagsCache[imdbId];
+  }
+  if (norm.personal_rank == null && rankCache[imdbId] != null) {
+    norm.personal_rank = rankCache[imdbId];
+  }
+  if (norm.watched_at == null && watchedAtCache[imdbId]) {
+    norm.watched_at = watchedAtCache[imdbId];
+  }
+  return norm;
 }
 
 function activateDemoMode(customMessageHtml = null) {
@@ -423,22 +538,17 @@ function activateDemoMode(customMessageHtml = null) {
   const rawMap = loadLocalWatchMap();
   const tagsCache = loadImpressionTagsCache();
   const rankCache = loadPersonalRankCache();
+  const watchedAtCache = loadWatchedAtCache();
   state.watchMap = {};
   for (const [id, entry] of Object.entries(rawMap)) {
-    const norm = normalizeWatchEntry(entry);
-    if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[id])) {
-      norm.impression_tags = tagsCache[id];
-    }
-    if (norm.personal_rank == null && rankCache[id] != null) {
-      norm.personal_rank = rankCache[id];
-    }
-    state.watchMap[id] = norm;
+    state.watchMap[id] = applyCachedFieldsToEntry(id, entry, { tagsCache, rankCache, watchedAtCache });
   }
   for (const [id, rank] of Object.entries(rankCache)) {
     if (!state.watchMap[id]) {
       state.watchMap[id] = normalizeWatchEntry({
         status: "watched",
         personal_rank: rank,
+        watched_at: watchedAtCache[id] || null,
         impression_tags: Array.isArray(tagsCache[id]) ? tagsCache[id] : [],
       });
     }
@@ -462,6 +572,197 @@ async function loadTasteProfile() {
   } catch {
     state.tasteProfile = { ...DEFAULT_TASTE_PROFILE };
   }
+}
+
+async function loadCountryMap() {
+  try {
+    const resp = await fetch("./country_map.json", { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const parsed = await resp.json();
+    state.countryMap = parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    state.countryMap = {};
+  }
+}
+
+function getMovieCountryString(movie) {
+  if (!movie) return "";
+  const direct = String(movie.country || "").trim();
+  if (direct && direct.toLowerCase() !== "n/a") return direct;
+  const fromMap = String(state.countryMap?.[movie.imdb_id] || "").trim();
+  if (fromMap && fromMap.toLowerCase() !== "n/a") return fromMap;
+  return "";
+}
+
+function isIndianMovieClient(movie) {
+  const countryStr = getMovieCountryString(movie).toLowerCase();
+  if (countryStr) {
+    const parts = countryStr.split(",").map((s) => s.trim());
+    if (parts.some((p) => p === "india" || p.includes("india"))) {
+      return true;
+    }
+  }
+  const lang = String(movie?.original_language || "").trim().toLowerCase().split(",")[0].trim();
+  return ["hi", "ta", "te", "ml", "kn", "bn", "pa", "mr", "gu", "hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "punjabi", "marathi"].includes(lang);
+}
+
+const ENGLISH_SPHERE_COUNTRIES = [
+  "united states",
+  "usa",
+  "united kingdom",
+  "uk",
+  "canada",
+  "australia",
+  "new zealand",
+  "ireland",
+];
+
+const EUROPEAN_COUNTRIES = [
+  "france",
+  "germany",
+  "italy",
+  "spain",
+  "sweden",
+  "denmark",
+  "norway",
+  "belgium",
+  "austria",
+  "poland",
+  "netherlands",
+  "switzerland",
+  "finland",
+  "portugal",
+  "czech",
+  "hungary",
+  "greece",
+  "romania",
+  "russia",
+  "iceland",
+  "ukraine",
+];
+
+const EUROPEAN_LANGS = new Set(["fr", "de", "it", "es", "sv", "da", "no", "nl", "pl", "fi", "pt", "ru", "hu", "cs", "el", "ro", "is", "uk"]);
+
+function getMovieCountryCategory(movie) {
+  const countryStr = getMovieCountryString(movie).toLowerCase();
+  const lang = String(movie?.original_language || "").trim().toLowerCase().split(",")[0].trim();
+
+  if (countryStr) {
+    const parts = countryStr.split(",").map((s) => s.trim());
+    if (parts.some((p) => p === "japan" || p.includes("japan"))) return "jp";
+    if (parts.some((p) => p.includes("south korea") || p === "korea")) return "kr";
+    if (parts.some((p) => ENGLISH_SPHERE_COUNTRIES.some((ec) => p === ec || p.includes(ec)))) {
+      return "english_sphere";
+    }
+    if (parts.some((p) => EUROPEAN_COUNTRIES.some((ec) => p === ec || p.includes(ec)))) {
+      return "eu";
+    }
+    return "other";
+  }
+
+  // country 未設定時は original_language でフォールバック判定
+  if (lang === "ja" || lang === "japanese") return "jp";
+  if (lang === "ko" || lang === "korean") return "kr";
+  if (lang === "en" || lang === "english") return "english_sphere";
+  if (EUROPEAN_LANGS.has(lang)) return "eu";
+  return "other";
+}
+
+function matchesCountryFilter(movie, filterValue) {
+  if (!filterValue) return true;
+  const countryStr = getMovieCountryString(movie).toLowerCase();
+  const lang = String(movie?.original_language || "").trim().toLowerCase().split(",")[0].trim();
+
+  if (filterValue === "english_sphere") {
+    if (countryStr) {
+      return ENGLISH_SPHERE_COUNTRIES.some((c) => countryStr.includes(c));
+    }
+    return lang === "en" || lang === "english";
+  }
+  if (filterValue === "jp") {
+    if (countryStr) return countryStr.includes("japan");
+    return lang === "ja" || lang === "japanese";
+  }
+  if (filterValue === "kr") {
+    if (countryStr) return countryStr.includes("korea");
+    return lang === "ko" || lang === "korean";
+  }
+  if (filterValue === "eu") {
+    if (countryStr) {
+      return EUROPEAN_COUNTRIES.some((c) => countryStr.includes(c));
+    }
+    return EUROPEAN_LANGS.has(lang);
+  }
+  if (filterValue === "other") {
+    return (
+      !matchesCountryFilter(movie, "english_sphere") &&
+      !matchesCountryFilter(movie, "jp") &&
+      !matchesCountryFilter(movie, "kr") &&
+      !matchesCountryFilter(movie, "eu")
+    );
+  }
+  return true;
+}
+
+function isWithinDays(isoStr, days = 14) {
+  if (!isoStr) return false;
+  const ts = Date.parse(isoStr);
+  if (Number.isNaN(ts)) return false;
+  const diffMs = Date.now() - ts;
+  return diffMs >= -86400000 && diffMs < days * 86400000;
+}
+
+function getEligibleNewlyFlatrateItems() {
+  const userSignals = buildUserPreferenceSignals();
+  const items = [];
+  for (const m of state.movies) {
+    const newProvs = Array.isArray(m.newly_flatrate_providers) ? m.newly_flatrate_providers.filter(Boolean) : [];
+    if (newProvs.length === 0 || !isWithinDays(m.newly_flatrate_at, 14)) continue;
+    const w = state.watchMap[m.imdb_id];
+    const status = w?.status || "unwatched";
+    if (status === "watched") continue;
+    const matchScore = computeMatchScore(m, state.tasteProfile, userSignals);
+    if (status === "watchlist" || (status === "unwatched" && matchScore >= 80)) {
+      items.push({ movie: m, providers: newProvs, matchScore, isWatchlist: status === "watchlist" });
+    }
+  }
+  items.sort((a, b) => Number(b.isWatchlist) - Number(a.isWatchlist) || b.matchScore - a.matchScore);
+  return items;
+}
+
+function renderNewlyFlatrateBanner() {
+  const banner = document.getElementById("newly-flatrate-banner");
+  if (!banner) return;
+
+  if (state.newlyFlatrateBannerDismissed) {
+    banner.classList.add("hidden");
+    banner.innerHTML = "";
+    return;
+  }
+
+  const items = getEligibleNewlyFlatrateItems();
+  if (items.length === 0) {
+    banner.classList.add("hidden");
+    banner.innerHTML = "";
+    return;
+  }
+
+  const first = items[0];
+  const provLabel = first.providers.slice(0, 2).join("・");
+  const restCount = items.length - 1;
+  const restText = restCount > 0 ? ` 他 ${restCount}本` : "";
+  const activeFilterClass = state.newlyFlatrateFilterActive ? "is-filtering" : "";
+
+  banner.classList.remove("hidden");
+  banner.innerHTML = `
+    <div class="newly-banner-text">
+      <span class="newly-banner-msg">🆕 新着見放題: 『${escapeHtml(first.movie.title_ja)}』(${escapeHtml(provLabel)})${escapeHtml(restText)}</span>
+    </div>
+    <div class="newly-banner-actions">
+      <button type="button" class="btn btn-secondary newly-banner-view-btn ${activeFilterClass}" data-newly-action="filter">${state.newlyFlatrateFilterActive ? "一覧に戻す" : "見る"}</button>
+      <button type="button" class="newly-banner-close-btn" data-newly-action="dismiss" aria-label="通知を閉じる">✕</button>
+    </div>
+  `;
 }
 
 function inferAwardsBonus(movie) {
@@ -743,6 +1044,8 @@ function setTastePanelOpen(open) {
 function saveFilterPrefs() {
   const providerEl = document.getElementById("filter-provider");
   const flatrateEl = document.getElementById("filter-flatrate-only");
+  const countryEl = document.getElementById("filter-country");
+  const excludeIndiaEl = document.getElementById("filter-exclude-india");
   if (!providerEl || !flatrateEl) return;
   try {
     localStorage.setItem(
@@ -750,6 +1053,8 @@ function saveFilterPrefs() {
       JSON.stringify({
         provider: providerEl.value || "all",
         flatrateOnly: Boolean(flatrateEl.checked),
+        country: countryEl ? countryEl.value || "" : "",
+        excludeIndia: Boolean(excludeIndiaEl?.checked),
       })
     );
   } catch {
@@ -760,6 +1065,8 @@ function saveFilterPrefs() {
 function restoreFilterPrefs() {
   const providerEl = document.getElementById("filter-provider");
   const flatrateEl = document.getElementById("filter-flatrate-only");
+  const countryEl = document.getElementById("filter-country");
+  const excludeIndiaEl = document.getElementById("filter-exclude-india");
   if (!providerEl || !flatrateEl) return;
   try {
     const raw = localStorage.getItem(FILTER_PREFS_STORAGE_KEY);
@@ -772,6 +1079,13 @@ function restoreFilterPrefs() {
       }
       if (typeof prefs.flatrateOnly === "boolean") {
         flatrateEl.checked = prefs.flatrateOnly;
+      }
+      if (countryEl && typeof prefs.country === "string") {
+        const hasCountry = [...countryEl.options].some((o) => o.value === prefs.country);
+        if (hasCountry) countryEl.value = prefs.country;
+      }
+      if (excludeIndiaEl && typeof prefs.excludeIndia === "boolean") {
+        excludeIndiaEl.checked = prefs.excludeIndia;
       }
     }
   } catch {
@@ -841,9 +1155,12 @@ function updateActiveFiltersBadge() {
   if (document.getElementById("filter-genre")?.value !== "all") count += 1;
   if (document.getElementById("filter-runtime")?.value) count += 1;
   if (document.getElementById("filter-watch")?.value !== "all") count += 1;
+  if (document.getElementById("filter-country")?.value) count += 1;
   if (document.getElementById("filter-flatrate-only")?.checked) count += 1;
+  if (document.getElementById("filter-exclude-india")?.checked) count += 1;
   if (document.getElementById("filter-sort")?.value !== "year_desc") count += 1;
   if (Array.isArray(state.presetGenres) && state.presetGenres.length > 0) count += 1;
+  if (state.newlyFlatrateFilterActive) count += 1;
 
   badge.textContent = String(count);
   badge.classList.toggle("hidden", count === 0);
@@ -1083,7 +1400,7 @@ function showToast(message, options = {}) {
 }
 
 async function initApp() {
-  await loadTasteProfile();
+  await Promise.all([loadTasteProfile(), loadCountryMap()]);
 
   // v3: 好み分析パネルはデフォルトで非表示（ボタンを押したときだけ開く）
   state.isTastePanelOpen = false;
@@ -1177,6 +1494,7 @@ function mergeWatchEntry(remoteEntry, localEntry) {
     return {
       ...localNorm,
       personal_rank: localNorm.personal_rank != null ? localNorm.personal_rank : remoteNorm.personal_rank,
+      watched_at: localNorm.watched_at || remoteNorm.watched_at || null,
       impression_tags:
         localNorm.impression_tags.length > 0 ? localNorm.impression_tags : remoteNorm.impression_tags,
       memo: localNorm.memo || remoteNorm.memo,
@@ -1185,6 +1503,7 @@ function mergeWatchEntry(remoteEntry, localEntry) {
   return {
     ...remoteNorm,
     personal_rank: remoteNorm.personal_rank != null ? remoteNorm.personal_rank : localNorm.personal_rank,
+    watched_at: remoteNorm.watched_at || localNorm.watched_at || null,
     impression_tags:
       remoteNorm.impression_tags.length > 0 ? remoteNorm.impression_tags : localNorm.impression_tags,
   };
@@ -1216,16 +1535,19 @@ async function loadSupabaseData() {
   state.watchMap = {};
   const tagsCache = loadImpressionTagsCache();
   const rankCache = loadPersonalRankCache();
+  const watchedAtCache = loadWatchedAtCache();
   const remoteMap = {};
 
+  if (watchRes.error) {
+    console.warn("user_watch_status取得警告:", watchRes.error);
+  }
+
   for (const row of watchRes.data || []) {
-    const norm = normalizeWatchEntry(row);
-    if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[row.imdb_id])) {
-      norm.impression_tags = tagsCache[row.imdb_id];
-    }
-    if (norm.personal_rank == null && rankCache[row.imdb_id] != null) {
-      norm.personal_rank = rankCache[row.imdb_id];
-    }
+    const norm = applyCachedFieldsToEntry(row.imdb_id, row, {
+      tagsCache,
+      rankCache,
+      watchedAtCache,
+    });
     remoteMap[row.imdb_id] = norm;
   }
 
@@ -1236,50 +1558,76 @@ async function loadSupabaseData() {
     state.watchMap[id] = remoteEntry;
   }
 
-  // 未ログイン時にブラウザ(localStorage)へ保存された記録をマージして即時反映
+  // ブラウザ(localStorage)へ保存された記録・順位・視聴日をマージして確実に復元
   for (const [id, localEntry] of Object.entries(localMap)) {
     if (!validMovieIds.has(id)) continue;
+    const enrichedLocal = applyCachedFieldsToEntry(id, localEntry, {
+      tagsCache,
+      rankCache,
+      watchedAtCache,
+    });
     if (!remoteMap[id]) {
-      if (isMeaningfulWatchEntry(localEntry)) {
-        state.watchMap[id] = localEntry;
+      if (isMeaningfulWatchEntry(enrichedLocal)) {
+        state.watchMap[id] = enrichedLocal;
       }
       continue;
     }
-    state.watchMap[id] = mergeWatchEntry(remoteMap[id], localEntry);
+    state.watchMap[id] = mergeWatchEntry(remoteMap[id], enrichedLocal);
   }
 
-  // personal_rankキャッシュにあってremote/localどちらにも未登録のIDも復元
+  // personal_rank / watched_at キャッシュにあってremote/localどちらにも未登録・未設定のIDも復元
   for (const [id, rank] of Object.entries(rankCache)) {
     if (!validMovieIds.has(id)) continue;
     if (!state.watchMap[id]) {
       state.watchMap[id] = normalizeWatchEntry({
         status: "watched",
         personal_rank: rank,
+        watched_at: watchedAtCache[id] || null,
         impression_tags: Array.isArray(tagsCache[id]) ? tagsCache[id] : [],
       });
     } else if (state.watchMap[id].personal_rank == null) {
       state.watchMap[id].personal_rank = rank;
     }
   }
+
+  for (const [id, dtStr] of Object.entries(watchedAtCache)) {
+    if (!validMovieIds.has(id)) continue;
+    if (state.watchMap[id] && !state.watchMap[id].watched_at) {
+      state.watchMap[id].watched_at = dtStr;
+    }
+  }
+
+  // Supabase側から返ってきた最新の personal_rank / watched_at もキャッシュと双方向同期
+  syncLocalStorageBackupsForWatchMap(state.watchMap);
 }
 
 async function upsertWatchRowsWithColumnFallback(rows) {
   let currentRows = rows.map((r) => ({ ...r }));
-  let res = await state.supabase.from("user_watch_status").upsert(currentRows);
+  let res = await state.supabase
+    .from("user_watch_status")
+    .upsert(currentRows, { onConflict: "imdb_id" });
 
-  if (res.error && isMissingColumnError(res.error, "personal_rank")) {
-    currentRows = currentRows.map(({ personal_rank: _omitRank, ...rest }) => rest);
-    res = await state.supabase.from("user_watch_status").upsert(currentRows);
+  const fallbackCols = ["personal_rank", "watched_at", "impression_tags"];
+  const omitted = [];
+
+  for (let attempt = 0; attempt < fallbackCols.length; attempt += 1) {
+    if (!res.error) break;
+    const missingCol = fallbackCols.find(
+      (col) => !omitted.includes(col) && isMissingColumnError(res.error, col)
+    );
+    if (!missingCol) break;
+    omitted.push(missingCol);
+    currentRows = currentRows.map((row) => {
+      const copy = { ...row };
+      delete copy[missingCol];
+      return copy;
+    });
+    res = await state.supabase
+      .from("user_watch_status")
+      .upsert(currentRows, { onConflict: "imdb_id" });
   }
-  if (res.error && isMissingColumnError(res.error, "impression_tags")) {
-    currentRows = currentRows.map(({ impression_tags: _omitTags, ...rest }) => rest);
-    res = await state.supabase.from("user_watch_status").upsert(currentRows);
-  }
-  if (res.error && (isMissingColumnError(res.error, "personal_rank") || isMissingColumnError(res.error, "impression_tags"))) {
-    currentRows = currentRows.map(({ personal_rank: _r, impression_tags: _t, ...rest }) => rest);
-    res = await state.supabase.from("user_watch_status").upsert(currentRows);
-  }
-  return res;
+
+  return { ...res, omittedColumns: omitted };
 }
 
 async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
@@ -1298,6 +1646,7 @@ async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
       status: localEntry.status || "unwatched",
       my_rating: localEntry.my_rating != null ? Number(localEntry.my_rating) : null,
       personal_rank: normalizePersonalRank(localEntry.personal_rank),
+      watched_at: normalizeWatchedAt(localEntry.watched_at),
       impression_tags: Array.isArray(localEntry.impression_tags) ? localEntry.impression_tags : [],
       memo: localEntry.memo ? String(localEntry.memo) : null,
       updated_at: localEntry.updated_at || new Date().toISOString(),
@@ -1313,16 +1662,19 @@ async function syncLocalWatchMapToSupabase({ silentIfEmpty = false } = {}) {
 
   state.isSyncingLocalToCloud = true;
   try {
-    const { error } = await upsertWatchRowsWithColumnFallback(pendingPayloads);
+    const { error, omittedColumns } = await upsertWatchRowsWithColumnFallback(pendingPayloads);
     if (!error) {
-      saveLocalWatchMap({});
+      if (!omittedColumns || omittedColumns.length === 0) {
+        saveLocalWatchMap({});
+      }
       for (const p of pendingPayloads) {
         state.watchMap[p.imdb_id] = normalizeWatchEntry(p);
       }
-      syncPersonalRankCacheFromWatchMap(state.watchMap);
+      syncLocalStorageBackupsForWatchMap(state.watchMap);
       showToast(`ブラウザに保存されていた ${pendingPayloads.length} 件の記録をクラウドへ同期しました`);
     } else {
       console.error("ローカル記録の同期エラー:", error);
+      showToast(`クラウド同期エラー: ${error.message || "権限または通信エラー"}`);
     }
   } finally {
     state.isSyncingLocalToCloud = false;
@@ -1387,6 +1739,10 @@ function resetAllFilterControls({ keepPreset = false, preserveSavedPrefs = false
   if (!preserveSavedPrefs) {
     document.getElementById("filter-provider").value = "all";
     document.getElementById("filter-flatrate-only").checked = false;
+    const countryEl = document.getElementById("filter-country");
+    if (countryEl) countryEl.value = "";
+    const excludeIndiaEl = document.getElementById("filter-exclude-india");
+    if (excludeIndiaEl) excludeIndiaEl.checked = false;
   }
   document.getElementById("filter-slot").value = "all";
   document.getElementById("filter-genre").value = "all";
@@ -1394,6 +1750,7 @@ function resetAllFilterControls({ keepPreset = false, preserveSavedPrefs = false
   document.getElementById("filter-watch").value = "all";
   document.getElementById("filter-query").value = "";
   document.getElementById("filter-sort").value = "year_desc";
+  state.newlyFlatrateFilterActive = false;
   if (!keepPreset) {
     state.activePreset = null;
     state.presetGenres = null;
@@ -1456,19 +1813,30 @@ function getFilteredMovies() {
   const runtimeMaxRaw = document.getElementById("filter-runtime").value;
   const runtimeMax = runtimeMaxRaw ? Number(runtimeMaxRaw) : null;
   const watch = document.getElementById("filter-watch").value;
+  const countryFilter = document.getElementById("filter-country")?.value || "";
+  const excludeIndia = Boolean(document.getElementById("filter-exclude-india")?.checked);
   const flatrateOnly = document.getElementById("filter-flatrate-only").checked;
   const query = document.getElementById("filter-query").value.trim().toLowerCase();
   const sort = document.getElementById("filter-sort").value;
 
+  const newlyEligibleIds = state.newlyFlatrateFilterActive
+    ? new Set(getEligibleNewlyFlatrateItems().map((x) => x.movie.imdb_id))
+    : null;
+
   const userSignals = buildUserPreferenceSignals();
 
   const filtered = state.movies.filter((m) => {
+    if (newlyEligibleIds && !newlyEligibleIds.has(m.imdb_id)) return false;
+
     if (decade !== "all") {
       const start = parseInt(decade.slice(0, 4), 10);
       if (m.release_year < start || m.release_year > start + 9) return false;
     }
     if (year !== "all" && String(m.release_year) !== year) return false;
     if (slot !== "all" && m.selection_slot !== slot) return false;
+
+    if (excludeIndia && isIndianMovieClient(m)) return false;
+    if (countryFilter && !matchesCountryFilter(m, countryFilter)) return false;
 
     const genres = m.genres || [];
     if (genre !== "all" && !genres.includes(genre)) return false;
@@ -1497,6 +1865,7 @@ function getFilteredMovies() {
         m.title_ja,
         m.title_en,
         m.director,
+        getMovieCountryString(m),
         ...(m.genres || []),
         ...(m.mood_tags || []),
       ]
@@ -1771,6 +2140,7 @@ function renderMovies() {
   const list = getFilteredMovies();
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
+  renderNewlyFlatrateBanner();
   updateWatchStatsSummary();
   updateLastUpdatedLabel();
   updateRankingNavBadges();
@@ -1873,29 +2243,52 @@ function isMissingColumnError(error, columnName) {
   const code = String(error.code || "");
   const msg = String(error.message || "").toLowerCase();
   const details = String(error.details || "").toLowerCase();
-  return (
-    code === "PGRST204" ||
-    code === "42703" ||
-    (msg.includes(columnName.toLowerCase()) && (msg.includes("column") || msg.includes("schema cache"))) ||
-    details.includes(columnName.toLowerCase())
+  const target = columnName.toLowerCase();
+  if (code === "PGRST204" || code === "42703") {
+    return msg.includes(target) || details.includes(target);
+  }
+  return msg.includes(target) && (msg.includes("column") || msg.includes("schema cache"));
+}
+
+function notifyMissingColumnHintOnce(omittedColumns) {
+  if (!Array.isArray(omittedColumns) || omittedColumns.length === 0) return;
+  if (state.hasShownMissingColumnHint) return;
+  state.hasShownMissingColumnHint = true;
+  showToast(
+    "※DBに新カラム未追加のため順位/視聴日はブラウザに保存しました（schema.sqlのALTER文でDB同期可）",
+    { durationMs: 5200 }
   );
+}
+
+function requireLoginForRankingAction() {
+  if (!state.isDemo && !state.userEmail) {
+    showToast("順位を保存するにはログインしてください", {
+      actionLabel: "ログイン",
+      onAction: openAuthModal,
+      durationMs: 4200,
+    });
+    openAuthModal();
+    return false;
+  }
+  return true;
 }
 
 async function upsertWatchStatus(payload) {
   const normalized = normalizeWatchEntry(payload);
   saveImpressionTagsCache(payload.imdb_id, normalized.impression_tags);
   savePersonalRankCacheEntry(payload.imdb_id, normalized.personal_rank);
+  saveWatchedAtCacheEntry(payload.imdb_id, normalized.watched_at);
   state.watchMap[payload.imdb_id] = normalized;
 
   if (state.isDemo) {
     saveLocalWatchMap(state.watchMap);
-    return { error: null, mode: "local" };
+    return { error: null, mode: "local", omittedColumns: [] };
   }
 
   // 未ログイン時は即座にブラウザ(localStorage)へ保存して操作を止めない
   if (!state.userEmail) {
     saveLocalWatchEntry(payload.imdb_id, normalized);
-    return { error: null, mode: "local" };
+    return { error: null, mode: "local", omittedColumns: [] };
   }
 
   const rowPayload = {
@@ -1903,31 +2296,38 @@ async function upsertWatchStatus(payload) {
     status: normalized.status,
     my_rating: normalized.my_rating,
     personal_rank: normalized.personal_rank,
+    watched_at: normalized.watched_at,
     impression_tags: normalized.impression_tags,
     memo: normalized.memo ? String(normalized.memo) : null,
     updated_at: normalized.updated_at || new Date().toISOString(),
   };
 
-  const { error } = await upsertWatchRowsWithColumnFallback([rowPayload]);
+  const { error, omittedColumns } = await upsertWatchRowsWithColumnFallback([rowPayload]);
 
   if (error) {
     // クラウド失敗時もローカルバックアップは保持
     saveLocalWatchEntry(payload.imdb_id, normalized);
-    return { error, mode: "error" };
+    return { error, mode: "error", omittedColumns: omittedColumns || [] };
   }
 
-  // クラウド保存が成功したらローカル未同期キューから対象IDを除去
-  const localMap = loadLocalWatchMap();
-  if (localMap[payload.imdb_id]) {
-    delete localMap[payload.imdb_id];
-    saveLocalWatchMap(localMap);
+  if (omittedColumns && omittedColumns.length > 0) {
+    // DBに新カラム未追加時はブラウザキャッシュ・ローカルにも確実に保持
+    saveLocalWatchEntry(payload.imdb_id, normalized);
+    notifyMissingColumnHintOnce(omittedColumns);
+  } else {
+    // クラウド保存が完全成功したらローカル未同期キューから対象IDを除去
+    const localMap = loadLocalWatchMap();
+    if (localMap[payload.imdb_id]) {
+      delete localMap[payload.imdb_id];
+      saveLocalWatchMap(localMap);
+    }
   }
-  return { error: null, mode: "cloud" };
+  return { error: null, mode: "cloud", omittedColumns: omittedColumns || [] };
 }
 
 async function persistWatchEntriesBatch(entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
-    return { error: null, mode: "local" };
+    return { error: null, mode: "local", omittedColumns: [] };
   }
 
   const nowIso = new Date().toISOString();
@@ -1935,13 +2335,14 @@ async function persistWatchEntriesBatch(entries) {
     const norm = normalizeWatchEntry({ ...item, updated_at: item.updated_at || nowIso });
     saveImpressionTagsCache(norm.imdb_id, norm.impression_tags);
     savePersonalRankCacheEntry(norm.imdb_id, norm.personal_rank);
+    saveWatchedAtCacheEntry(norm.imdb_id, norm.watched_at);
     state.watchMap[norm.imdb_id] = norm;
     return norm;
   });
 
   if (state.isDemo) {
     saveLocalWatchMap(state.watchMap);
-    return { error: null, mode: "local" };
+    return { error: null, mode: "local", omittedColumns: [] };
   }
 
   if (!state.userEmail) {
@@ -1950,7 +2351,7 @@ async function persistWatchEntriesBatch(entries) {
       localMap[norm.imdb_id] = norm;
     }
     saveLocalWatchMap(localMap);
-    return { error: null, mode: "local" };
+    return { error: null, mode: "local", omittedColumns: [] };
   }
 
   const payloads = normalizedList.map((norm) => ({
@@ -1958,50 +2359,62 @@ async function persistWatchEntriesBatch(entries) {
     status: norm.status,
     my_rating: norm.my_rating,
     personal_rank: norm.personal_rank,
+    watched_at: norm.watched_at,
     impression_tags: norm.impression_tags,
     memo: norm.memo ? String(norm.memo) : null,
     updated_at: norm.updated_at,
   }));
 
-  const { error } = await upsertWatchRowsWithColumnFallback(payloads);
+  const { error, omittedColumns } = await upsertWatchRowsWithColumnFallback(payloads);
   if (error) {
     const localMap = loadLocalWatchMap();
     for (const norm of normalizedList) {
       localMap[norm.imdb_id] = norm;
     }
     saveLocalWatchMap(localMap);
-    return { error, mode: "error" };
+    return { error, mode: "error", omittedColumns: omittedColumns || [] };
   }
 
-  const localMap = loadLocalWatchMap();
-  let modifiedLocal = false;
-  for (const norm of normalizedList) {
-    if (localMap[norm.imdb_id]) {
-      delete localMap[norm.imdb_id];
-      modifiedLocal = true;
+  if (omittedColumns && omittedColumns.length > 0) {
+    const localMap = loadLocalWatchMap();
+    for (const norm of normalizedList) {
+      localMap[norm.imdb_id] = norm;
+    }
+    saveLocalWatchMap(localMap);
+    notifyMissingColumnHintOnce(omittedColumns);
+  } else {
+    const localMap = loadLocalWatchMap();
+    let modifiedLocal = false;
+    for (const norm of normalizedList) {
+      if (localMap[norm.imdb_id]) {
+        delete localMap[norm.imdb_id];
+        modifiedLocal = true;
+      }
+    }
+    if (modifiedLocal) {
+      saveLocalWatchMap(localMap);
     }
   }
-  if (modifiedLocal) {
-    saveLocalWatchMap(localMap);
-  }
-  return { error: null, mode: "cloud" };
+  return { error: null, mode: "cloud", omittedColumns: omittedColumns || [] };
 }
 
 async function applyRankedOrder(orderedImdbIds, removedImdbIds = []) {
   const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
   const updatedEntries = [];
   const nowIso = new Date().toISOString();
+  const todayStr = getTodayDateString();
 
   orderedImdbIds.forEach((imdbId, idx) => {
     if (!movieMap.has(imdbId)) return;
     const prev = normalizeWatchEntry(state.watchMap[imdbId]);
-    const nextStatus = prev.status === "watched" ? "watched" : "watched";
+    const nextStatus = "watched";
     const nextRank = idx + 1;
     updatedEntries.push({
       ...prev,
       imdb_id: imdbId,
       status: nextStatus,
       personal_rank: nextRank,
+      watched_at: prev.watched_at || todayStr,
       updated_at: nowIso,
     });
   });
@@ -2019,6 +2432,7 @@ async function applyRankedOrder(orderedImdbIds, removedImdbIds = []) {
   for (const entry of updatedEntries) {
     state.watchMap[entry.imdb_id] = normalizeWatchEntry(entry);
     savePersonalRankCacheEntry(entry.imdb_id, entry.personal_rank);
+    saveWatchedAtCacheEntry(entry.imdb_id, entry.watched_at);
   }
 
   renderMovies();
@@ -2044,6 +2458,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
   const prev = normalizeWatchEntry(state.watchMap[imdbId]);
   let nextStatus = prev.status;
   let nextRating = prev.my_rating;
+  let nextWatchedAt = prev.watched_at;
 
   if (action === "watchlist") {
     nextStatus = prev.status === "watchlist" ? "unwatched" : "watchlist";
@@ -2054,12 +2469,15 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     if (prev.status === "watched") {
       nextStatus = "unwatched";
       nextRating = null;
+      nextWatchedAt = null;
     } else {
       nextStatus = "watched";
+      nextWatchedAt = prev.watched_at || getTodayDateString();
     }
   } else if (action === "rate") {
     nextStatus = "watched";
     nextRating = Number(ratingValue);
+    nextWatchedAt = prev.watched_at || getTodayDateString();
   }
 
   const payload = {
@@ -2067,6 +2485,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     status: nextStatus,
     my_rating: nextRating,
     personal_rank: prev.personal_rank,
+    watched_at: nextWatchedAt,
     impression_tags: prev.impression_tags || [],
     memo: prev.memo ? prev.memo : null,
     updated_at: new Date().toISOString(),
@@ -2078,14 +2497,16 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     saveLocalWatchEntry(imdbId, payload);
   }
   savePersonalRankCacheEntry(imdbId, payload.personal_rank);
+  saveWatchedAtCacheEntry(imdbId, payload.watched_at);
   renderMovies();
 
   const { error, mode } = await upsertWatchStatus(payload);
   if (error) {
-    // クラウド保存に失敗した場合はローカルには保持しつつ通知
-    showToast(`クラウド同期に失敗（ブラウザに一時保存済み）: ${error.message}`, {
+    // クラウド保存に失敗した場合はローカルには保持しつつエラー内容を明示通知
+    showToast(`クラウド保存エラー（ブラウザに一時保存済み）: ${error.message || "RLS権限/通信エラー"}`, {
       actionLabel: "ログイン",
       onAction: openAuthModal,
+      durationMs: 4500,
     });
     return;
   }
@@ -2227,20 +2648,23 @@ async function finalizeBattlePlacement(insertIndex) {
   b.decidedRank = insertIndex + 1;
   b.phase = "result";
 
-  // 参加時にwatchedでなければ自動でwatchedに昇格させたうえで連番保存
+  // 参加時にwatchedでなければ自動でwatched & watched_atをセットしたうえで連番保存
   const prevTarget = normalizeWatchEntry(state.watchMap[b.targetMovie.imdb_id]);
   state.watchMap[b.targetMovie.imdb_id] = normalizeWatchEntry({
     ...prevTarget,
     imdb_id: b.targetMovie.imdb_id,
     status: "watched",
     personal_rank: b.decidedRank,
+    watched_at: prevTarget.watched_at || getTodayDateString(),
   });
 
   renderBattleModal();
   const { error } = await applyRankedOrder(newOrderIds);
   b.isSaving = false;
   if (error) {
-    showToast(`クラウド同期に失敗（ブラウザに保存済み）: ${error.message}`);
+    showToast(`クラウド保存エラー（ブラウザに保存済み）: ${error.message || "RLS権限/通信エラー"}`, {
+      durationMs: 4500,
+    });
   }
 }
 
@@ -2266,6 +2690,8 @@ async function handleBattleChoice(sideKey) {
 }
 
 function startBattleForMovie(imdbId, queueIds = []) {
+  if (!requireLoginForRankingAction()) return;
+
   const targetMovie = state.movies.find((m) => m.imdb_id === imdbId);
   if (!targetMovie) return;
 
@@ -2303,6 +2729,8 @@ function startBattleForMovie(imdbId, queueIds = []) {
 }
 
 function startBatchFiveStarBattle() {
+  if (!requireLoginForRankingAction()) return;
+
   const unranked = getUnrankedFiveStarMovies();
   if (unranked.length === 0) {
     showToast("未ランクの★5作品はありません。");
@@ -2316,8 +2744,194 @@ function startBatchFiveStarBattle() {
 }
 
 /* ============================================================================
-   🏆 マイランキング ビュー
+   🏆 マイランキング & 📅 年間鑑賞ログ ビュー
    ============================================================================ */
+
+function getEffectiveWatchedDate(watchEntry) {
+  if (!watchEntry) return null;
+  const direct = normalizeWatchedAt(watchEntry.watched_at);
+  if (direct) return direct;
+  if (watchEntry.status === "watched" || watchEntry.my_rating != null) {
+    return normalizeWatchedAt(watchEntry.updated_at);
+  }
+  return null;
+}
+
+function renderAnnualLogView() {
+  const container = document.getElementById("annual-log-content");
+  if (!container) return;
+
+  const movieMap = new Map(state.movies.map((m) => [m.imdb_id, m]));
+  const watchedLogs = [];
+
+  for (const [imdbId, rawEntry] of Object.entries(state.watchMap)) {
+    const entry = normalizeWatchEntry(rawEntry);
+    if (entry.status !== "watched" && entry.my_rating == null) continue;
+    const movie = movieMap.get(imdbId);
+    if (!movie) continue;
+    const effectiveDate = getEffectiveWatchedDate(entry);
+    const logYear = effectiveDate ? effectiveDate.slice(0, 4) : "不明";
+    watchedLogs.push({
+      movie,
+      watch: entry,
+      effectiveDate,
+      logYear,
+      isFallbackDate: !entry.watched_at && Boolean(effectiveDate),
+    });
+  }
+
+  // 年ごとの集計
+  const yearCounts = new Map();
+  for (const item of watchedLogs) {
+    yearCounts.set(item.logYear, (yearCounts.get(item.logYear) || 0) + 1);
+  }
+  const sortedYears = [...yearCounts.keys()].sort((a, b) => {
+    if (a === "不明") return 1;
+    if (b === "不明") return -1;
+    return Number(b) - Number(a);
+  });
+
+  if (
+    state.selectedLogYear !== "all" &&
+    !yearCounts.has(state.selectedLogYear)
+  ) {
+    state.selectedLogYear = sortedYears[0] || "all";
+  }
+  if (state.selectedLogYear === "all" && sortedYears.length > 0 && !state._logYearUserChosen) {
+    state.selectedLogYear = sortedYears[0];
+  }
+
+  const targetLogs = watchedLogs
+    .filter((item) => state.selectedLogYear === "all" || item.logYear === state.selectedLogYear)
+    .sort((a, b) => {
+      const da = a.effectiveDate || "0000-00-00";
+      const db = b.effectiveDate || "0000-00-00";
+      if (db !== da) return db.localeCompare(da);
+      return (b.watch.my_rating || 0) - (a.watch.my_rating || 0);
+    });
+
+  // サマリー集計
+  const totalWatched = targetLogs.length;
+  const ratedItems = targetLogs.filter((x) => x.watch.my_rating != null);
+  const avgStar =
+    ratedItems.length > 0
+      ? (ratedItems.reduce((acc, x) => acc + Number(x.watch.my_rating), 0) / ratedItems.length).toFixed(2)
+      : "-";
+  const fiveStarCount = ratedItems.filter((x) => Number(x.watch.my_rating) === 5).length;
+
+  const genreCounts = new Map();
+  for (const item of targetLogs) {
+    for (const g of item.movie.genres || []) {
+      genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
+    }
+  }
+  const topGenres = [...genreCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3);
+
+  const yearTabsHtml = [
+    ...sortedYears.map((yr) => {
+      const cnt = yearCounts.get(yr) || 0;
+      const label = yr === "不明" ? "日付未設定" : `${yr}年`;
+      const active = state.selectedLogYear === yr;
+      return `<button type="button" class="log-year-tab ${active ? "active" : ""}" data-log-year="${escapeHtml(yr)}">${escapeHtml(label)} <span>(${cnt}本)</span></button>`;
+    }),
+    `<button type="button" class="log-year-tab ${state.selectedLogYear === "all" ? "active" : ""}" data-log-year="all">すべて <span>(${watchedLogs.length}本)</span></button>`,
+  ].join("");
+
+  const topGenresHtml =
+    topGenres.length > 0
+      ? topGenres.map(([g, c]) => `<span class="log-genre-chip">${escapeHtml(g)} (${c})</span>`).join("")
+      : `<span class="tg-empty-hint">-</span>`;
+
+  const logsListHtml =
+    targetLogs.length > 0
+      ? targetLogs
+          .map(({ movie: m, watch: w, effectiveDate, isFallbackDate }) => {
+            const dateBadge = effectiveDate ? effectiveDate.replaceAll("-", "/") : "日付未設定";
+            const tags = w.impression_tags || [];
+            const memoPreview = w.memo ? String(w.memo).trim() : "";
+            return `
+              <article class="annual-log-row" data-ranking-detail="${escapeHtml(m.imdb_id)}">
+                <div class="log-date-col">
+                  <span class="log-date-badge ${isFallbackDate ? "is-fallback" : ""}" title="${isFallbackDate ? "視聴日未設定のため記録更新日を表示（タップで修正可）" : "視聴日"}">${escapeHtml(dateBadge)}</span>
+                </div>
+                <div class="log-thumb-wrap">
+                  ${
+                    m.poster_url
+                      ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
+                      : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
+                  }
+                </div>
+                <div class="log-row-main">
+                  <div class="log-row-title-line">
+                    <h3 class="log-row-title">${escapeHtml(m.title_ja)}</h3>
+                    <span class="log-release-year">(${m.release_year})</span>
+                    ${w.my_rating != null ? `<span class="ranking-star-pill">★${w.my_rating}</span>` : ""}
+                    ${w.personal_rank != null ? `<span class="badge badge-personal-rank">🏆 ${w.personal_rank}位</span>` : ""}
+                  </div>
+                  ${
+                    tags.length > 0
+                      ? `<div class="log-row-chips">${tags.map((t) => `<span class="ranking-imp-chip">${escapeHtml(t)}</span>`).join("")}</div>`
+                      : ""
+                  }
+                  ${memoPreview ? `<p class="log-row-memo">${escapeHtml(memoPreview)}</p>` : ""}
+                </div>
+              </article>
+            `;
+          })
+          .join("")
+      : `
+        <div class="ranking-empty-card">
+          <div class="ranking-empty-icon">📅</div>
+          <h3>この期間の鑑賞ログはまだありません</h3>
+          <p>映画を「👁 観た」や「★1〜5」で記録すると、視聴日が自動で記録されてここに時系列で並びます。</p>
+        </div>
+      `;
+
+  container.innerHTML = `
+    <div class="log-year-tabs">${yearTabsHtml}</div>
+    <div class="log-summary-grid">
+      <div class="log-stat-card">
+        <div class="log-stat-label">視聴本数</div>
+        <div class="log-stat-value">${totalWatched}<span>本</span></div>
+      </div>
+      <div class="log-stat-card">
+        <div class="log-stat-label">平均★評価</div>
+        <div class="log-stat-value">${avgStar === "-" ? "-" : `★${avgStar}`}</div>
+      </div>
+      <div class="log-stat-card">
+        <div class="log-stat-label">★5 傑作</div>
+        <div class="log-stat-value">${fiveStarCount}<span>本</span></div>
+      </div>
+      <div class="log-stat-card log-stat-genres">
+        <div class="log-stat-label">よく観たジャンル TOP3</div>
+        <div class="log-top-genres">${topGenresHtml}</div>
+      </div>
+    </div>
+    <div class="annual-log-list">${logsListHtml}</div>
+  `;
+}
+
+function switchRankingTab(tabName) {
+  state.activeRankingTab = tabName === "log" ? "log" : "best";
+  document.querySelectorAll(".ranking-subtab[data-ranking-tab]").forEach((btn) => {
+    const active = btn.dataset.rankingTab === state.activeRankingTab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
+  });
+  const bestPanel = document.getElementById("ranking-best-panel");
+  const logPanel = document.getElementById("ranking-log-panel");
+  if (bestPanel) bestPanel.classList.toggle("hidden", state.activeRankingTab !== "best");
+  if (logPanel) logPanel.classList.toggle("hidden", state.activeRankingTab !== "log");
+
+  const titleEl = document.getElementById("ranking-page-title");
+  if (titleEl) {
+    titleEl.textContent =
+      state.activeRankingTab === "log" ? "📅 年間鑑賞ログ" : "🏆 マイランキング（歴代ベスト）";
+  }
+  renderRankingView();
+}
 
 function renderRankingView() {
   const rankedList = getRankedMoviesList();
@@ -2325,10 +2939,19 @@ function renderRankingView() {
 
   const subtitleEl = document.getElementById("ranking-subtitle");
   if (subtitleEl) {
-    subtitleEl.textContent =
-      rankedList.length > 0
-        ? `現在 ${rankedList.length}作品を順位付け済み（↑↓で微調整・⚔️ 再戦で順位を決め直せます）`
-        : "まだランクインした作品がありません。★5評価や詳細画面から2択バトルで順位を決めましょう！";
+    if (state.activeRankingTab === "log") {
+      subtitleEl.textContent = "視聴日ごとの鑑賞履歴・サマリー（行をタップして視聴日やメモを編集できます）";
+    } else {
+      subtitleEl.textContent =
+        rankedList.length > 0
+          ? `現在 ${rankedList.length}作品を順位付け済み（↑↓で微調整・⚔️ 再戦で順位を決め直せます）`
+          : "まだランクインした作品がありません。★5評価や詳細画面から2択バトルで順位を決めましょう！";
+    }
+  }
+
+  if (state.activeRankingTab === "log") {
+    renderAnnualLogView();
+    return;
   }
 
   const bannerEl = document.getElementById("ranking-unranked-banner");
@@ -2410,6 +3033,8 @@ function renderRankingView() {
 }
 
 async function handleRankingRowAction(action, imdbId) {
+  if (!requireLoginForRankingAction()) return;
+
   const rankedList = getRankedMoviesList();
   const orderedIds = rankedList.map((item) => item.movie.imdb_id);
   const idx = orderedIds.indexOf(imdbId);
@@ -2417,14 +3042,20 @@ async function handleRankingRowAction(action, imdbId) {
   if (action === "up") {
     if (idx <= 0) return;
     [orderedIds[idx - 1], orderedIds[idx]] = [orderedIds[idx], orderedIds[idx - 1]];
-    await applyRankedOrder(orderedIds);
+    const { error } = await applyRankedOrder(orderedIds);
+    if (error) {
+      showToast(`クラウド保存エラー（ブラウザに保存済み）: ${error.message || "RLS権限/通信エラー"}`);
+    }
     return;
   }
 
   if (action === "down") {
     if (idx < 0 || idx >= orderedIds.length - 1) return;
     [orderedIds[idx], orderedIds[idx + 1]] = [orderedIds[idx + 1], orderedIds[idx]];
-    await applyRankedOrder(orderedIds);
+    const { error } = await applyRankedOrder(orderedIds);
+    if (error) {
+      showToast(`クラウド保存エラー（ブラウザに保存済み）: ${error.message || "RLS権限/通信エラー"}`);
+    }
     return;
   }
 
@@ -2436,9 +3067,121 @@ async function handleRankingRowAction(action, imdbId) {
   if (action === "remove") {
     if (idx < 0) return;
     orderedIds.splice(idx, 1);
-    await applyRankedOrder(orderedIds, [imdbId]);
-    showToast("マイランキングから外しました（★評価と視聴済みステータスは保持）");
+    const { error } = await applyRankedOrder(orderedIds, [imdbId]);
+    if (error) {
+      showToast(`クラウド保存エラー（ブラウザに保存済み）: ${error.message || "RLS権限/通信エラー"}`);
+    } else {
+      showToast("マイランキングから外しました（★評価と視聴済みステータスは保持）");
+    }
   }
+}
+
+/* ============================================================================
+   🎭 似ている未視聴映画3本レコメンド
+   ============================================================================ */
+
+function getSimilarUnwatchedMovies(
+  targetMovie,
+  allMovies = state.movies,
+  watchMap = state.watchMap,
+  tasteProfile = state.tasteProfile,
+  limit = 3
+) {
+  if (!targetMovie) return [];
+  const targetGenres = new Set(targetMovie.genres || []);
+  const targetDirectors = new Set(
+    String(targetMovie.director || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const targetLang = String(targetMovie.original_language || "").trim().toLowerCase();
+  const targetMainCountry = getMovieCountryString(targetMovie)
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const targetMoods = new Set(targetMovie.mood_tags || []);
+  const targetYear = Number(targetMovie.release_year) || 0;
+  const userSignals = buildUserPreferenceSignals();
+
+  const scored = [];
+  for (const cand of allMovies || []) {
+    if (!cand || cand.imdb_id === targetMovie.imdb_id) continue;
+    const w = watchMap?.[cand.imdb_id];
+    if (w && (w.status === "watched" || w.my_rating != null)) continue;
+
+    let simScore = 0;
+    const commonPoints = [];
+
+    // 1. 共通ジャンル数
+    const candGenres = cand.genres || [];
+    const sharedGenres = candGenres.filter((g) => targetGenres.has(g));
+    if (sharedGenres.length > 0) {
+      simScore += sharedGenres.length * 18 + (sharedGenres.length >= 2 ? 8 : 0);
+      commonPoints.push(sharedGenres.slice(0, 2).join("・"));
+    }
+
+    // 2. 同監督
+    const candDirectors = String(cand.director || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const sameDirector = candDirectors.some((d) => targetDirectors.has(d));
+    if (sameDirector) {
+      simScore += 25;
+      commonPoints.unshift("同監督");
+    }
+
+    // 3. 同原語 / 同製作国
+    const candLang = String(cand.original_language || "").trim().toLowerCase();
+    if (targetLang && candLang && targetLang === candLang) {
+      simScore += 8;
+    }
+    const candMainCountry = getMovieCountryString(cand).split(",")[0]?.trim().toLowerCase();
+    if (targetMainCountry && candMainCountry && targetMainCountry === candMainCountry) {
+      simScore += 5;
+    }
+
+    // 4. 公開年の近さ
+    const candYear = Number(cand.release_year) || 0;
+    if (targetYear && candYear) {
+      const diff = Math.abs(targetYear - candYear);
+      if (diff <= 3) simScore += 10;
+      else if (diff <= 7) simScore += 6;
+      else if (diff <= 12) simScore += 3;
+    }
+
+    // 5. 共通ムードタグ
+    const sharedMoods = (cand.mood_tags || []).filter((t) => targetMoods.has(t));
+    if (sharedMoods.length > 0) {
+      simScore += sharedMoods.length * 10;
+      if (commonPoints.length < 2) commonPoints.push(`#${sharedMoods[0]}`);
+    }
+
+    // 6. 自分マッチ度
+    const matchScore = computeMatchScore(cand, tasteProfile, userSignals);
+    simScore += matchScore * 0.25;
+
+    const flatrate = cand.jp_providers?.flatrate || [];
+    if (flatrate.length > 0 && commonPoints.length < 2) {
+      commonPoints.push("見放題あり");
+    }
+
+    scored.push({
+      movie: cand,
+      simScore,
+      matchScore,
+      reasonLabel: commonPoints.slice(0, 2).join(" / ") || `${cand.release_year}年作品`,
+    });
+  }
+
+  scored.sort(
+    (a, b) =>
+      b.simScore - a.simScore ||
+      b.matchScore - a.matchScore ||
+      (b.movie.composite_score || 0) - (a.movie.composite_score || 0)
+  );
+  return scored.slice(0, limit);
 }
 
 function openMovieModal(imdbId) {
@@ -2451,6 +3194,7 @@ function openMovieModal(imdbId) {
   const userSignals = buildUserPreferenceSignals();
   const matchScore = computeMatchScore(m, state.tasteProfile, userSignals);
   const currentRank = normalizePersonalRank(w.personal_rank);
+  const countryDisplay = getMovieCountryString(m);
 
   const modal = document.getElementById("movie-modal");
   const hasBackdrop = Boolean(m.backdrop_url);
@@ -2481,13 +3225,46 @@ function openMovieModal(imdbId) {
   const battleBtnLabel =
     currentRank != null ? `🏆 現在 ${currentRank}位（⚔️ 再戦する）` : "⚔️ 順位を決める";
 
+  const similarPicks = getSimilarUnwatchedMovies(m, state.movies, state.watchMap, state.tasteProfile, 3);
+  const similarSectionHtml =
+    similarPicks.length > 0
+      ? `
+      <div class="similar-movies-section">
+        <h3 class="similar-section-title">🎭 この映画に似ている未視聴のおすすめ（${similarPicks.length}本）</h3>
+        <div class="similar-movies-grid">
+          ${similarPicks
+            .map(({ movie: sim, matchScore: simMatch, reasonLabel }) => {
+              return `
+                <button type="button" class="similar-movie-card" data-open-similar="${escapeHtml(sim.imdb_id)}">
+                  <div class="similar-poster-wrap">
+                    ${
+                      sim.poster_url
+                        ? `<img src="${escapeHtml(sim.poster_url)}" alt="${escapeHtml(sim.title_ja)}" loading="lazy" />`
+                        : `<div class="similar-poster-fallback"><strong>${escapeHtml(sim.title_ja)}</strong></div>`
+                    }
+                    <span class="similar-match-badge">マッチ ${simMatch}%</span>
+                  </div>
+                  <div class="similar-card-body">
+                    <div class="similar-card-title">${escapeHtml(sim.title_ja)}</div>
+                    <div class="similar-card-meta">${sim.release_year}年</div>
+                    <div class="similar-card-reason">${escapeHtml(reasonLabel)}</div>
+                  </div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `
+      : "";
+
   document.getElementById("modal-body").innerHTML = `
     ${backdropBanner}
     <div style="${hasBackdrop ? "padding:16px 20px 20px" : ""}">
       <div class="modal-header">
         <div>
           <h2>${escapeHtml(m.title_ja)} <span style="color:var(--text-secondary);font-size:0.9rem">(${m.release_year})</span></h2>
-          <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${escapeHtml(m.director || "不明")}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}</div>
+          <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${escapeHtml(m.director || "不明")}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}${countryDisplay ? ` ｜ ${escapeHtml(countryDisplay)}` : ""}</div>
         </div>
         ${hasBackdrop ? "" : `<button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">✕</button>`}
       </div>
@@ -2560,6 +3337,14 @@ function openMovieModal(imdbId) {
           <button id="modal-battle-btn" type="button" class="btn btn-secondary modal-battle-btn" data-imdb-id="${escapeHtml(imdbId)}">${escapeHtml(battleBtnLabel)}</button>
         </div>
 
+        <div class="modal-watched-at-row">
+          <label for="modal-watched-at">📅 視聴日</label>
+          <div class="modal-watched-at-inputs">
+            <input id="modal-watched-at" type="date" value="${escapeHtml(w.watched_at || "")}" />
+            <button id="modal-watched-at-clear" type="button" class="btn btn-ghost btn-sm">クリア</button>
+          </div>
+        </div>
+
         <div class="impression-section">
           <div class="impression-title">印象チップ（複数選択可・任意）</div>
           ${impressionGroupsHtml}
@@ -2568,6 +3353,8 @@ function openMovieModal(imdbId) {
         <textarea id="modal-memo" rows="2" placeholder="感想やメモ...">${escapeHtml(w.memo || "")}</textarea>
         <div><button id="save-watch-btn" type="button" class="btn btn-primary" data-imdb-id="${escapeHtml(imdbId)}">記録を保存</button></div>
       </div>
+
+      ${similarSectionHtml}
     </div>
   `;
 
@@ -2575,11 +3362,33 @@ function openMovieModal(imdbId) {
   modalBody.style.padding = hasBackdrop ? "0" : "20px";
 
   let selectedStatus = w.status || "unwatched";
+  const watchedAtInput = document.getElementById("modal-watched-at");
+
   modal.querySelectorAll("[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedStatus = btn.dataset.status;
       modal.querySelectorAll("[data-status]").forEach((b) => b.classList.toggle("active", b === btn));
+      if (selectedStatus === "watched" && watchedAtInput && !watchedAtInput.value) {
+        watchedAtInput.value = getTodayDateString();
+      }
     });
+  });
+
+  const ratingSelect = document.getElementById("modal-rating");
+  if (ratingSelect) {
+    ratingSelect.addEventListener("change", () => {
+      if (ratingSelect.value && selectedStatus !== "watched") {
+        selectedStatus = "watched";
+        modal.querySelectorAll("[data-status]").forEach((b) => b.classList.toggle("active", b.dataset.status === "watched"));
+        if (watchedAtInput && !watchedAtInput.value) {
+          watchedAtInput.value = getTodayDateString();
+        }
+      }
+    });
+  }
+
+  document.getElementById("modal-watched-at-clear")?.addEventListener("click", () => {
+    if (watchedAtInput) watchedAtInput.value = "";
   });
 
   modal.querySelectorAll("[data-impression-tag]").forEach((chip) => {
@@ -2595,16 +3404,29 @@ function openMovieModal(imdbId) {
     });
   });
 
+  modal.querySelectorAll("[data-open-similar]").forEach((simBtn) => {
+    simBtn.addEventListener("click", () => {
+      const targetId = simBtn.dataset.openSimilar;
+      if (targetId) {
+        openMovieModal(targetId);
+      }
+    });
+  });
+
   const battleBtn = document.getElementById("modal-battle-btn");
   if (battleBtn) {
     battleBtn.addEventListener("click", async () => {
+      if (!requireLoginForRankingAction()) return;
+
       const ratingVal = document.getElementById("modal-rating").value;
       const ensuredStatus = "watched";
+      const watchedAtVal = normalizeWatchedAt(watchedAtInput?.value) || w.watched_at || getTodayDateString();
       const payload = {
         imdb_id: imdbId,
         status: ensuredStatus,
         my_rating: ratingVal ? Number(ratingVal) : w.my_rating,
         personal_rank: currentRank,
+        watched_at: watchedAtVal,
         impression_tags: [...selectedImpressionSet],
         memo: document.getElementById("modal-memo").value.trim() || null,
         updated_at: new Date().toISOString(),
@@ -2621,11 +3443,15 @@ function openMovieModal(imdbId) {
     saveBtn.addEventListener("click", async () => {
       const ratingVal = document.getElementById("modal-rating").value;
       const latestEntry = normalizeWatchEntry(state.watchMap[imdbId]);
+      const inputDate = normalizeWatchedAt(watchedAtInput?.value);
+      const resolvedWatchedAt =
+        selectedStatus === "watched" ? inputDate || latestEntry.watched_at || getTodayDateString() : inputDate;
       const payload = {
         imdb_id: imdbId,
         status: selectedStatus,
         my_rating: ratingVal ? Number(ratingVal) : null,
         personal_rank: latestEntry.personal_rank,
+        watched_at: resolvedWatchedAt,
         impression_tags: [...selectedImpressionSet],
         memo: document.getElementById("modal-memo").value.trim() || null,
         updated_at: new Date().toISOString(),
@@ -2633,7 +3459,9 @@ function openMovieModal(imdbId) {
 
       const { error, mode } = await upsertWatchStatus(payload);
       if (error) {
-        showToast(`クラウド同期に失敗（ブラウザに一時保存済み）: ${error.message}`);
+        showToast(`クラウド保存エラー（ブラウザに一時保存済み）: ${error.message || "RLS権限/通信エラー"}`, {
+          durationMs: 4500,
+        });
       } else if (mode === "local") {
         notifyLocalSaveOnce();
       } else {
@@ -2644,7 +3472,11 @@ function openMovieModal(imdbId) {
     });
   }
 
-  modal.showModal();
+  if (!modal.open) {
+    modal.showModal();
+  } else {
+    modal.scrollTop = 0;
+  }
 }
 
 function drawGachaPicks() {
@@ -2833,12 +3665,19 @@ function bindEvents() {
     "filter-genre",
     "filter-runtime",
     "filter-watch",
+    "filter-country",
     "filter-flatrate-only",
+    "filter-exclude-india",
     "filter-sort",
   ].forEach((id) => {
-    document.getElementById(id).addEventListener("change", () => {
+    document.getElementById(id)?.addEventListener("change", () => {
       clearActivePreset();
-      if (id === "filter-provider" || id === "filter-flatrate-only") {
+      if (
+        id === "filter-provider" ||
+        id === "filter-flatrate-only" ||
+        id === "filter-country" ||
+        id === "filter-exclude-india"
+      ) {
         saveFilterPrefs();
       }
       renderMovies();
@@ -2854,6 +3693,26 @@ function bindEvents() {
     clearFilterPrefs();
     resetAllFilterControls();
     renderMovies();
+  });
+
+  document.getElementById("newly-flatrate-banner")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-newly-action]");
+    if (!btn) return;
+    const action = btn.dataset.newlyAction;
+    if (action === "dismiss") {
+      state.newlyFlatrateBannerDismissed = true;
+      state.newlyFlatrateFilterActive = false;
+      renderMovies();
+      return;
+    }
+    if (action === "filter") {
+      state.newlyFlatrateFilterActive = !state.newlyFlatrateFilterActive;
+      if (state.newlyFlatrateFilterActive) {
+        clearActivePreset();
+        setActiveMainView("browse");
+      }
+      renderMovies();
+    }
   });
 
   const toggleFiltersBtn = document.getElementById("toggle-filters-btn");
@@ -2873,6 +3732,18 @@ function bindEvents() {
   const rankingView = document.getElementById("ranking-view");
   if (rankingView) {
     rankingView.addEventListener("click", (e) => {
+      const subTab = e.target.closest(".ranking-subtab[data-ranking-tab]");
+      if (subTab) {
+        switchRankingTab(subTab.dataset.rankingTab);
+        return;
+      }
+      const logYearBtn = e.target.closest("[data-log-year]");
+      if (logYearBtn) {
+        state.selectedLogYear = logYearBtn.dataset.logYear;
+        state._logYearUserChosen = true;
+        renderAnnualLogView();
+        return;
+      }
       if (e.target.closest("#start-batch-battle-btn")) {
         startBatchFiveStarBattle();
         return;
@@ -2914,6 +3785,7 @@ function bindEvents() {
       const openRankingBtn = e.target.closest("[data-battle-open-ranking]");
       if (openRankingBtn) {
         document.getElementById("battle-modal")?.close();
+        state.activeRankingTab = "best";
         setActiveMainView("ranking");
       }
     });

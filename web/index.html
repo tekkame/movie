@@ -164,12 +164,28 @@
                 <option value="watched">視聴済み</option>
               </select>
             </div>
+
+            <div class="filter-group">
+              <label for="filter-country">国・地域</label>
+              <select id="filter-country">
+                <option value="">すべて</option>
+                <option value="english_sphere">アメリカ・英語圏</option>
+                <option value="jp">日本</option>
+                <option value="kr">韓国</option>
+                <option value="eu">欧州</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
           </div>
 
           <div class="filter-row-secondary">
             <label class="checkbox-label">
               <input id="filter-flatrate-only" type="checkbox" />
               <span>見放題のみ</span>
+            </label>
+            <label class="checkbox-label">
+              <input id="filter-exclude-india" type="checkbox" />
+              <span>🇮🇳 インド映画を除外</span>
             </label>
             <div class="filter-group compact">
               <select id="filter-sort" aria-label="並び順">
@@ -184,6 +200,8 @@
           </div>
         </div>
       </section>
+
+      <div id="newly-flatrate-banner" class="newly-flatrate-banner hidden" role="region" aria-label="新着見放題通知"></div>
 
       <nav id="year-tabs-bar" class="year-tabs-bar" aria-label="公開年タブ"></nav>
 
@@ -209,19 +227,28 @@
       <section id="movies-grid" class="movies-grid" aria-live="polite"></section>
     </div>
 
-    <!-- 🏆 マイランキング ビュー -->
-    <section id="ranking-view" class="ranking-view hidden" aria-label="マイランキング">
+    <!-- 🏆 マイランキング & 📅 年間鑑賞ログ ビュー -->
+    <section id="ranking-view" class="ranking-view hidden" aria-label="マイランキングと年間鑑賞ログ">
       <div class="ranking-header-bar">
         <div class="ranking-header-left">
           <button id="ranking-back-btn" type="button" class="btn btn-secondary">← 映画一覧へ戻る</button>
           <div>
-            <h2 class="ranking-page-title">🏆 マイランキング（歴代ベスト）</h2>
+            <h2 id="ranking-page-title" class="ranking-page-title">🏆 マイランキング（歴代ベスト）</h2>
             <p id="ranking-subtitle" class="ranking-subtitle">お気に入りの映画を2択バトルで順位付け</p>
           </div>
         </div>
+        <div class="ranking-subtabs" role="tablist" aria-label="ランキング表示切り替え">
+          <button type="button" class="ranking-subtab active" data-ranking-tab="best" role="tab" aria-selected="true">🏆 歴代ベスト</button>
+          <button type="button" class="ranking-subtab" data-ranking-tab="log" role="tab" aria-selected="false">📅 年間鑑賞ログ</button>
+        </div>
       </div>
-      <div id="ranking-unranked-banner" class="ranking-unranked-banner hidden"></div>
-      <div id="ranking-list" class="ranking-list"></div>
+      <div id="ranking-best-panel">
+        <div id="ranking-unranked-banner" class="ranking-unranked-banner hidden"></div>
+        <div id="ranking-list" class="ranking-list"></div>
+      </div>
+      <div id="ranking-log-panel" class="hidden">
+        <div id="annual-log-content" class="annual-log-content"></div>
+      </div>
     </section>
   </main>
 

@@ -1280,6 +1280,7 @@ textarea::placeholder {
 .modal {
   width: min(780px, calc(100vw - 20px));
   max-width: 100%;
+  overflow-x: hidden;
   background: var(--bg-elevated);
   color: var(--text-primary);
   border: 1px solid var(--border-strong);
@@ -1304,6 +1305,7 @@ textarea::placeholder {
 .modal-body,
 .auth-form {
   padding: 20px;
+  min-width: 0;
 }
 
 .modal-backdrop-banner {
@@ -1336,6 +1338,17 @@ textarea::placeholder {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 14px;
+  min-width: 0;
+}
+
+.modal-header > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.modal-header .card-en {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .modal-header h2 {
@@ -1343,6 +1356,7 @@ textarea::placeholder {
   font-size: 1.25rem;
   font-weight: 800;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .icon-close {
@@ -3136,6 +3150,499 @@ textarea::placeholder {
     min-height: 36px;
     padding: 6px 6px;
     font-size: 0.76rem;
+  }
+}
+
+/* ============================================================================
+   🆕 新着見放題 1行通知バナー
+   ============================================================================ */
+
+.newly-flatrate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(6, 182, 212, 0.1));
+  border: 1px solid var(--emerald-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.newly-banner-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.newly-banner-msg {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #d1fae5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.newly-banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.newly-banner-view-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  min-height: 28px;
+}
+
+.newly-banner-view-btn.is-filtering {
+  background: var(--emerald-soft);
+  color: var(--emerald-bright);
+  border-color: var(--emerald-border);
+}
+
+.newly-banner-close-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newly-banner-close-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+/* ============================================================================
+   📅 視聴日入力 & 年間鑑賞ログタブ
+   ============================================================================ */
+
+.ranking-subtabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.ranking-subtab {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ranking-subtab:hover {
+  color: var(--text-primary);
+}
+
+.ranking-subtab.active {
+  background: var(--gold-soft);
+  color: var(--gold-bright);
+  box-shadow: inset 0 0 0 1px var(--gold-border);
+}
+
+.annual-log-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.log-year-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.log-year-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.log-year-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.log-year-tab.active {
+  background: var(--gold-soft);
+  color: var(--gold-bright);
+  border-color: var(--gold-border);
+}
+
+.log-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.log-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  min-width: 0;
+}
+
+.log-stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.log-stat-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-stat-value span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: 3px;
+}
+
+.log-top-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.log-genre-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--emerald-soft);
+  color: var(--emerald-bright);
+  border: 1px solid var(--emerald-border);
+}
+
+.annual-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.annual-log-row {
+  display: grid;
+  grid-template-columns: 92px 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.annual-log-row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+}
+
+.log-date-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 7px;
+  background: var(--bg-control);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.log-date-badge.is-fallback {
+  color: var(--text-secondary);
+  border-style: dashed;
+}
+
+.log-thumb-wrap {
+  width: 42px;
+  height: 62px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #141824;
+  border: 1px solid var(--border-subtle);
+}
+
+.log-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.log-row-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-row-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.log-row-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.log-release-year {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.log-row-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.log-row-memo {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-watched-at-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.modal-watched-at-row label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.modal-watched-at-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+input[type="date"] {
+  background: var(--bg-control);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  color-scheme: dark;
+}
+
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 0.74rem;
+}
+
+/* ============================================================================
+   🎭 詳細モーダル内「似ている未視聴映画3本」
+   ============================================================================ */
+
+.similar-movies-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.similar-section-title {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.similar-movies-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.similar-movie-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-family: inherit;
+  min-width: 0;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.similar-movie-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-border);
+  background: var(--bg-card-hover);
+}
+
+.similar-poster-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #121622;
+  overflow: hidden;
+}
+
+.similar-poster-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.similar-poster-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  font-size: 0.72rem;
+  background: radial-gradient(circle at 30% 25%, #232b42 0%, #0e111a 100%);
+}
+
+.similar-match-badge {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  background: rgba(7, 8, 12, 0.88);
+  border: 1px solid var(--emerald-border);
+  color: var(--emerald-bright);
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.similar-card-body {
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.similar-card-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.28;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.similar-card-meta {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.similar-card-reason {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--cyan-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .log-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .annual-log-row {
+    grid-template-columns: 78px 36px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .log-date-badge {
+    font-size: 0.68rem;
+    padding: 3px 4px;
+  }
+
+  .log-thumb-wrap {
+    width: 36px;
+    height: 54px;
+  }
+
+  .similar-movies-grid {
+    gap: 6px;
+  }
+
+  .similar-card-body {
+    padding: 6px;
+  }
+
+  .similar-card-title {
+    font-size: 0.7rem;
+  }
+
+  .similar-match-badge {
+    font-size: 0.58rem;
+    padding: 1px 4px;
   }
 }
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
 
-from scoring import compute_composite_score, parse_awards_bonus, select_yearly_top20
+from scoring import compute_composite_score, is_indian_movie, parse_awards_bonus, select_yearly_top20
 
 
 class TestScoringAndSelection(unittest.TestCase):
@@ -135,6 +135,72 @@ class TestScoringAndSelection(unittest.TestCase):
         self.assertLess(local_only, 65.0)
         self.assertGreater(global_hit, 75.0)
         self.assertGreater(global_hit, local_only)
+
+    def test_indian_movie_cap_max_2_per_year_and_manual_pick_priority(self) -> None:
+        # インド映画が10本高スコアで並んでも、1年の中で最大2本までに制限され、
+        # スコアが低めでも is_manual_pick=True の作品は必ず選出されること
+        self.assertTrue(is_indian_movie({"country": "India", "original_language": "en"}))
+        self.assertTrue(is_indian_movie({"country": "", "original_language": "hi"}))
+        self.assertTrue(is_indian_movie({"country": "", "language": "Telugu, Hindi"}))
+        self.assertFalse(is_indian_movie({"country": "United States", "original_language": "en"}))
+
+        candidates = []
+        for i in range(10):
+            candidates.append(
+                {
+                    "imdb_id": f"tt_india_{i:02d}",
+                    "release_year": 2026,
+                    "title_en": f"Indian Hit {i}",
+                    "genres": ["Action", "Drama"],
+                    "country": "India" if i % 2 == 0 else "",
+                    "original_language": "hi" if i % 3 == 0 else "ta",
+                    "imdb_rating": 8.9 - i * 0.05,
+                    "imdb_votes": 120000,
+                    "metascore": 88 - i,
+                    "rt_score": 95 - i,
+                    "awards_text": "10 wins",
+                }
+            )
+        for i in range(22):
+            candidates.append(
+                {
+                    "imdb_id": f"tt_global_{i:02d}",
+                    "release_year": 2026,
+                    "title_en": f"Global Film {i}",
+                    "genres": ["Drama", "Thriller"] if i % 2 == 0 else ["Sci-Fi", "Action"],
+                    "country": "United States",
+                    "original_language": "en",
+                    "imdb_rating": 7.4 - i * 0.02,
+                    "imdb_votes": 90000,
+                    "metascore": 76 - (i % 6),
+                    "rt_score": 84 - (i % 6),
+                    "awards_text": "2 wins",
+                }
+            )
+        # スコアは低めだが manual_picks.txt 指定作品
+        candidates.append(
+            {
+                "imdb_id": "tt1060277",
+                "release_year": 2026,
+                "title_en": "Manual Pick Film",
+                "genres": ["Horror", "Sci-Fi"],
+                "country": "United States",
+                "original_language": "en",
+                "imdb_rating": 7.0,
+                "imdb_votes": 430000,
+                "metascore": 64,
+                "rt_score": 78,
+                "awards_text": "10 wins",
+                "is_manual_pick": True,
+            }
+        )
+
+        selected = select_yearly_top20(candidates, target_count=20, top_n=12, max_indian_per_year=2)
+        self.assertEqual(len(selected), 20)
+        indian_selected = [m for m in selected if is_indian_movie(m)]
+        self.assertEqual(len(indian_selected), 2)
+        selected_ids = {m["imdb_id"] for m in selected}
+        self.assertIn("tt1060277", selected_ids)
 
 
 if __name__ == "__main__":

@@ -339,6 +339,161 @@ class TestFetchAndSync(unittest.TestCase):
         self.assertTrue(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", {2024}, existing_counts))
         self.assertTrue(fetch_and_sync.should_sync_year_movies(1999, current_year, "weekly", set(), existing_counts))
 
+    def test_select_year_candidates_top35_plus_genre_popular15_and_manual_picks(self) -> None:
+        # 枠1(35本)が高IMDbドラマで埋まっても、枠2(15本)が 50,000票以上・IMDb 6.8以上のジャンル人気作を拾い、
+        # manual_picks は投票数・スコア不問で無条件収録されることを検証
+        items = [
+            {
+                "imdb_id": f"tt_drama_{i:02d}",
+                "release_year": 2008,
+                "title_en": f"High Rated Drama {i}",
+                "genres": ["Drama"],
+                "imdb_rating": 8.4 - i * 0.01,
+                "imdb_votes": 40000 + i * 500,
+            }
+            for i in range(45)
+        ]
+        # クローバーフィールド型（IMDb 7.0 / 43万票 / Horror, Sci-Fi, Thriller）
+        items.append(
+            {
+                "imdb_id": "tt1060277",
+                "release_year": 2008,
+                "title_en": "Cloverfield",
+                "genres": ["Action", "Horror", "Sci-Fi"],
+                "imdb_rating": 7.0,
+                "imdb_votes": 430000,
+            }
+        )
+        # 投票数5万未満のIMDb 6.9ホラーは枠2対象外（枠1の35本にも入れない）
+        items.append(
+            {
+                "imdb_id": "tt_low_votes_horror",
+                "release_year": 2008,
+                "title_en": "Low Vote Horror",
+                "genres": ["Horror"],
+                "imdb_rating": 6.9,
+                "imdb_votes": 20000,
+            }
+        )
+        # manual_picks に指定された低投票作（無条件で収録される）
+        items.append(
+            {
+                "imdb_id": "tt9990001",
+                "release_year": 2008,
+                "title_en": "Manual Niche Gem",
+                "genres": ["Mystery"],
+                "imdb_rating": 6.2,
+                "imdb_votes": 4500,
+            }
+        )
+
+        selected = fetch_and_sync.select_year_candidates_multibucket(
+            items,
+            year=2008,
+            candidates_per_year=50,
+            current_year=2026,
+            manual_picks={"tt9990001"},
+        )
+        # itemsは48件なので全件返るが、より大きな60件ケースでも枠2が機能することを確認するため追加
+        for i in range(15):
+            items.append(
+                {
+                    "imdb_id": f"tt_drama_extra_{i:02d}",
+                    "release_year": 2008,
+                    "title_en": f"Extra Drama {i}",
+                    "genres": ["Drama"],
+                    "imdb_rating": 7.9 - i * 0.01,
+                    "imdb_votes": 35000,
+                }
+            )
+        selected = fetch_and_sync.select_year_candidates_multibucket(
+            items,
+            year=2008,
+            candidates_per_year=50,
+            current_year=2026,
+            manual_picks={"tt9990001"},
+        )
+        self.assertEqual(len(selected), 50)
+        selected_ids = {m["imdb_id"] for m in selected}
+        self.assertIn("tt1060277", selected_ids)
+        self.assertIn("tt9990001", selected_ids)
+        self.assertNotIn("tt_low_votes_horror", selected_ids)
+        manual_entry = next(m for m in selected if m["imdb_id"] == "tt9990001")
+        self.assertTrue(manual_entry.get("is_manual_pick"))
+
+    def test_load_manual_picks_parses_comments_and_ignores_invalid(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "manual_picks.txt"
+            p.write_text(
+                "# header comment\n\ntt1060277 # Cloverfield\n  tt31193180\ninvalid_id\ntt5052448 # Get Out\n",
+                encoding="utf-8",
+            )
+            picks = fetch_and_sync.load_manual_picks(p)
+            self.assertEqual(picks, {"tt1060277", "tt31193180", "tt5052448"})
+
+    def test_compute_newly_flatrate_update_diff_and_14day_retention(self) -> None:
+        now = datetime(2026, 11, 23, 12, 0, 0, tzinfo=timezone.utc)
+
+        # 1. 初回登録（prev_providers=None）は差分なし
+        provs, at = fetch_and_sync.compute_newly_flatrate_update(
+            prev_providers=None,
+            new_providers={"flatrate": ["U-NEXT"]},
+            prev_newly_providers=[],
+            prev_newly_at=None,
+            now_dt=now,
+        )
+        self.assertEqual(provs, [])
+        self.assertIsNone(at)
+
+        # 2. 新しく U-NEXT が見放題に追加 -> 検知＆現在時刻セット
+        provs, at = fetch_and_sync.compute_newly_flatrate_update(
+            prev_providers={"flatrate": ["Netflix"]},
+            new_providers={"flatrate": ["Netflix", "U-NEXT"]},
+            prev_newly_providers=[],
+            prev_newly_at=None,
+            now_dt=now,
+        )
+        self.assertEqual(provs, ["U-NEXT"])
+        self.assertEqual(at, now.isoformat())
+
+        # 3. 10日後（14日未満）: 追加なしでも現在 flatrate に残っていれば保持
+        ten_days_later = now + timedelta(days=10)
+        provs2, at2 = fetch_and_sync.compute_newly_flatrate_update(
+            prev_providers={"flatrate": ["Netflix", "U-NEXT"]},
+            new_providers={"flatrate": ["Netflix", "U-NEXT"]},
+            prev_newly_providers=provs,
+            prev_newly_at=at,
+            now_dt=ten_days_later,
+        )
+        self.assertEqual(provs2, ["U-NEXT"])
+        self.assertEqual(at2, at)
+
+        # 4. 10日後にさらに Amazon Prime Video が追加 -> 既存のU-NEXTとマージしてタイムスタンプ更新
+        provs3, at3 = fetch_and_sync.compute_newly_flatrate_update(
+            prev_providers={"flatrate": ["Netflix", "U-NEXT"]},
+            new_providers={"flatrate": ["Netflix", "U-NEXT", "Amazon Prime Video"]},
+            prev_newly_providers=provs2,
+            prev_newly_at=at2,
+            now_dt=ten_days_later,
+        )
+        self.assertEqual(provs3, ["U-NEXT", "Amazon Prime Video"])
+        self.assertEqual(at3, ten_days_later.isoformat())
+
+        # 5. 14日経過（>= 14日）で自動クリア
+        fourteen_days_later = ten_days_later + timedelta(days=14)
+        provs4, at4 = fetch_and_sync.compute_newly_flatrate_update(
+            prev_providers={"flatrate": ["Netflix", "U-NEXT", "Amazon Prime Video"]},
+            new_providers={"flatrate": ["Netflix", "U-NEXT", "Amazon Prime Video"]},
+            prev_newly_providers=provs3,
+            prev_newly_at=at3,
+            now_dt=fourteen_days_later,
+        )
+        self.assertEqual(provs4, [])
+        self.assertIsNone(at4)
+
 
 if __name__ == "__main__":
     unittest.main()

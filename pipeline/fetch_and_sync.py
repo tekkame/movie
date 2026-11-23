@@ -209,7 +209,54 @@ KNOWN_OMDB_SEED_DATA: dict[str, dict[str, Any]] = {
         "country": "United States",
         "language": "English",
     },
+    "tt1060277": {
+        "metascore": 64,
+        "rt_score": 78,
+        "awards_text": "10 wins & 27 nominations",
+        "director": "Matt Reeves",
+        "country": "United States",
+        "language": "English",
+    },
 }
+
+DEFAULT_MANUAL_PICKS_PATH = Path(__file__).resolve().parent / "manual_picks.txt"
+DEFAULT_COUNTRY_MAP_PATH = Path(__file__).resolve().parent.parent / "web" / "country_map.json"
+
+
+def load_manual_picks(filepath: str | Path | None = None) -> set[str]:
+    """
+    pipeline/manual_picks.txt から手動ピックアップ対象の IMDb ID (ttXXXXXXX) を読み込む。
+    `#` 以降のコメント・空行を許容する。ファイル未存在時は空集合を返す。
+    """
+    path = Path(filepath) if filepath is not None else DEFAULT_MANUAL_PICKS_PATH
+    if not path.exists():
+        return set()
+    picks: set[str] = set()
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        token = line.split()[0].strip()
+        if token.startswith("tt") and token[2:].isdigit():
+            picks.add(token)
+    return picks
+
+
+def _extract_unknown_pgrst204_column(status_code: int, body_text: str) -> Optional[str]:
+    """
+    PostgREST が PGRST204 ("Could not find the '<col>' column of '<table>' in the schema cache")
+    を返した際、その未知カラム名を抽出して返す。該当しなければ None。
+    """
+    import re
+
+    if status_code not in (400, 404):
+        return None
+    if "PGRST204" not in body_text and "schema cache" not in body_text.lower():
+        return None
+    m = re.search(r"Could not find the '([^']+)' column", body_text)
+    if m:
+        return m.group(1)
+    return None
 
 
 def preserve_ai_enrichment(
@@ -294,18 +341,65 @@ class SupabaseClient:
     def upsert(self, table: str, records: list[dict[str, Any]], chunk_size: int = 200) -> None:
         if not records:
             return
+        omitted_cols: set[str] = set()
         for i in range(0, len(records), chunk_size):
             chunk = records[i : i + chunk_size]
-            resp = requests.post(
-                f"{self.base_url}/{table}",
-                headers=self.headers,
-                json=chunk,
-                timeout=60,
-            )
-            if not resp.ok:
+            while True:
+                payload = (
+                    [{k: v for k, v in row.items() if k not in omitted_cols} for row in chunk]
+                    if omitted_cols
+                    else chunk
+                )
+                resp = requests.post(
+                    f"{self.base_url}/{table}",
+                    headers=self.headers,
+                    json=payload,
+                    timeout=60,
+                )
+                if resp.ok:
+                    break
+                unknown_col = _extract_unknown_pgrst204_column(resp.status_code, resp.text)
+                if unknown_col and unknown_col not in omitted_cols:
+                    print(
+                        f"  [WARN] {table} にカラム '{unknown_col}' が未追加のため除外してリトライします (schema.sql要適用)",
+                        file=sys.stderr,
+                    )
+                    omitted_cols.add(unknown_col)
+                    continue
                 raise RuntimeError(
                     f"Supabase upsert failed ({table}, HTTP {resp.status_code}): {resp.text[:500]}"
                 )
+
+    def patch_by_imdb_id(
+        self,
+        table: str,
+        imdb_id: str,
+        fields: dict[str, Any],
+        omitted_cols: set[str] | None = None,
+    ) -> None:
+        skip = omitted_cols if omitted_cols is not None else set()
+        while True:
+            payload = {k: v for k, v in fields.items() if k not in skip}
+            if not payload:
+                return
+            resp = requests.patch(
+                f"{self.base_url}/{table}",
+                params={"imdb_id": f"eq.{imdb_id}"},
+                headers=self.headers,
+                json=payload,
+                timeout=20,
+            )
+            if resp.ok:
+                return
+            unknown_col = _extract_unknown_pgrst204_column(resp.status_code, resp.text)
+            if unknown_col and unknown_col not in skip:
+                print(
+                    f"  [WARN] {table} PATCHでカラム '{unknown_col}' が未追加のため除外してリトライします",
+                    file=sys.stderr,
+                )
+                skip.add(unknown_col)
+                continue
+            resp.raise_for_status()
 
     def delete_by_imdb_ids(self, table: str, imdb_ids: list[str], chunk_size: int = 100) -> None:
         if not imdb_ids:
@@ -329,7 +423,7 @@ def build_excluded_genres(include_animation: bool = True) -> set[str]:
     return excluded
 
 
-GENRE_RESCUE_SET = {"Horror", "Thriller", "Sci-Fi", "Fantasy", "Mystery"}
+GENRE_RESCUE_SET = {"Horror", "Sci-Fi", "Thriller", "Action", "Comedy"}
 
 
 def select_year_candidates_multibucket(
@@ -337,75 +431,97 @@ def select_year_candidates_multibucket(
     year: int,
     candidates_per_year: int = 50,
     current_year: int | None = None,
+    manual_picks: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    1年分の候補を以下の3バケット（マルチバケット）で抽出し、
-    投票数の少ないローカル作品だけで一次候補が埋まる問題を防ぐ:
-      - バケットA（世界的話題作・高投票数枠: 最大20本）
-      - バケットB（ジャンル代表救済枠: 最大10本）
-      - バケットC（投票数信頼度を加味した高評価枠: 残り枠で計50本まで）
+    1年分の候補を以下の構造で抽出し、IMDb 6.8〜7.2帯のジャンル傑作（例: 『クローバーフィールド』）の
+    取りこぼしや投票数不足のローカル作品独占を防ぐ:
+      - 枠0（manual_picks.txt 無条件収録枠）: manual_picks に含まれる作品は投票数・スコア不問で無条件収録
+      - 枠1（IMDb高評価・話題作枠: 上位35本）: 高評価・話題性（信頼度加重スコア）順で上位35本を選出
+      - 枠2（ジャンル別人気作枠: 上位15本）: 枠1に入らなかった候補のうち、
+        Horror/Sci-Fi/Thriller/Action/Comedy のいずれかを含み、
+        投票数 50,000票以上（直近2年は max(15000, min_votes * 3) 以上）・IMDb 6.8以上
+        （25万票以上の超大作カルトは6.5以上）の作品を投票数・人気順で上位15本選出して計50本にする。
+        枠2が15本未満なら枠1の次点で50本まで埋める。
     """
-    if len(items) <= candidates_per_year:
-        return sorted(items, key=lambda x: (x["imdb_rating"], x["imdb_votes"]), reverse=True)
-
+    manual_set = manual_picks or set()
     ref_year = current_year if current_year is not None else dt.date.today().year
     min_votes = 3000 if year >= ref_year - 1 else 10000
+    genre_pop_min_votes = max(15000, min_votes * 3) if year >= ref_year - 1 else 50000
 
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    # バケットA: 投票数上位35本のうち imdb_rating >= 6.8 を話題性加重スコア順で最大20本
-    by_votes = sorted(items, key=lambda x: x["imdb_votes"], reverse=True)[:35]
-    bucket_a = [x for x in by_votes if float(x["imdb_rating"]) >= 6.8]
-    bucket_a.sort(
+    # 枠0: manual_picks.txt 指定作品を無条件で優先収録
+    for x in items:
+        if x["imdb_id"] in manual_set and x["imdb_id"] not in seen:
+            entry = dict(x)
+            entry["is_manual_pick"] = True
+            selected.append(entry)
+            seen.add(entry["imdb_id"])
+
+    if len(items) <= candidates_per_year:
+        rest = sorted(
+            [x for x in items if x["imdb_id"] not in seen],
+            key=lambda x: (float(x["imdb_rating"]), int(x["imdb_votes"])),
+            reverse=True,
+        )
+        selected.extend(rest)
+        return selected
+
+    # 枠1: 高評価・話題性加重スコア順（投票数信頼度を加味）で上位35本
+    slot1_limit = min(35, candidates_per_year)
+    remaining_for_slot1 = [x for x in items if x["imdb_id"] not in seen]
+    remaining_for_slot1.sort(
         key=lambda x: (
-            float(x["imdb_rating"]) + 0.5 * math.log10(max(int(x["imdb_votes"]), 1)),
+            float(x["imdb_rating"]) * min(1.0, 0.85 + 0.03 * math.log10(max(int(x["imdb_votes"]), 1))),
+            float(x["imdb_rating"]) + 0.35 * math.log10(max(int(x["imdb_votes"]), 1)),
             int(x["imdb_votes"]),
         ),
         reverse=True,
     )
-    for x in bucket_a[: min(20, candidates_per_year)]:
-        if x["imdb_id"] not in seen:
-            selected.append(x)
-            seen.add(x["imdb_id"])
+    for x in remaining_for_slot1:
+        if len(selected) >= slot1_limit + len([s for s in selected if s.get("is_manual_pick")]):
+            break
+        if len(selected) >= candidates_per_year:
+            break
+        selected.append(x)
+        seen.add(x["imdb_id"])
 
-    # バケットB: ホラー/スリラー/SF/ファンタジー/ミステリーで投票数 min_votes*3 以上を最大10本
-    # 世界的ヒット・カルト名作（25万票以上）は imdb_rating >= 6.5、それ以外は 6.8 以上を対象にする
-    bucket_b = [
+    # 枠2: ジャンル別人気作枠（上位15本）
+    # Horror / Sci-Fi / Thriller / Action / Comedy を含み、投票数 >= genre_pop_min_votes かつ IMDb >= 6.8
+    # （25万票以上の大ヒットカルトは 6.5 以上を救済対象）
+    slot2_quota = min(15, max(0, candidates_per_year - len(selected)))
+    bucket_genre = [
         x
         for x in items
         if x["imdb_id"] not in seen
-        and int(x["imdb_votes"]) >= min_votes * 3
+        and int(x["imdb_votes"]) >= genre_pop_min_votes
         and float(x["imdb_rating"]) >= (6.5 if int(x["imdb_votes"]) >= 250000 else 6.8)
         and any(g in GENRE_RESCUE_SET for g in (x.get("genres") or []))
     ]
-    bucket_b.sort(
+    bucket_genre.sort(
         key=lambda x: (
-            float(x["imdb_rating"]) + 0.5 * math.log10(max(int(x["imdb_votes"]), 1)),
             int(x["imdb_votes"]),
+            float(x["imdb_rating"]),
         ),
         reverse=True,
     )
-    for x in bucket_b[:10]:
+    for x in bucket_genre[:slot2_quota]:
         if len(selected) >= candidates_per_year:
             break
         selected.append(x)
         seen.add(x["imdb_id"])
 
-    # バケットC: 残りを「投票数信頼度を加味した調整IMDbスコア」順で上限まで埋める
-    bucket_c = [x for x in items if x["imdb_id"] not in seen]
-    bucket_c.sort(
-        key=lambda x: (
-            float(x["imdb_rating"]) * min(1.0, 0.85 + 0.03 * math.log10(max(int(x["imdb_votes"]), 1))),
-            int(x["imdb_votes"]),
-        ),
-        reverse=True,
-    )
-    for x in bucket_c:
-        if len(selected) >= candidates_per_year:
-            break
-        selected.append(x)
-        seen.add(x["imdb_id"])
+    # 枠2が15本未満なら枠1の次点で candidates_per_year（50本）まで埋める
+    if len(selected) < candidates_per_year:
+        for x in remaining_for_slot1:
+            if len(selected) >= candidates_per_year:
+                break
+            if x["imdb_id"] in seen:
+                continue
+            selected.append(x)
+            seen.add(x["imdb_id"])
 
     return selected
 
@@ -415,12 +531,14 @@ def download_imdb_candidates(
     end_year: int,
     candidates_per_year: int = 50,
     include_animation: bool = True,
+    manual_picks: set[str] | None = None,
 ) -> dict[int, list[dict[str, Any]]]:
     """
     IMDb非商用TSVデータセットをストリーミング読み込みし、
-    各年ごとの一次候補をマルチバケット（話題作＋ジャンル救済＋信頼度加重高評価）で抽出する。
+    各年ごとの一次候補をマルチバケット（枠0 manual_picks ＋ 枠1 上位35本 ＋ 枠2 ジャンル人気作15本）で抽出する。
     """
     current_year = dt.date.today().year
+    manual_set = manual_picks if manual_picks is not None else load_manual_picks()
     print("[1/4] IMDb ratings データセットを取得中...", flush=True)
     ratings_map: dict[str, tuple[float, int]] = {}
     with requests.get(IMDB_RATINGS_URL, stream=True, timeout=120) as resp:
@@ -428,12 +546,13 @@ def download_imdb_candidates(
         with gzip.GzipFile(fileobj=resp.raw) as gz:
             reader = csv.DictReader(io.TextIOWrapper(gz, encoding="utf-8"), delimiter="\t")
             for row in reader:
+                tconst = row["tconst"]
                 votes = int(row["numVotes"])
-                if votes < 3000:
+                if votes < 3000 and tconst not in manual_set:
                     continue
-                ratings_map[row["tconst"]] = (float(row["averageRating"]), votes)
+                ratings_map[tconst] = (float(row["averageRating"]), votes)
 
-    print(f"  -> 投票数3,000以上の作品: {len(ratings_map):,}件", flush=True)
+    print(f"  -> 投票数3,000以上（＋手動指定）の作品: {len(ratings_map):,}件", flush=True)
     print("[1/4] IMDb basics データセットから対象年代の長編映画を抽出中...", flush=True)
 
     excluded_genres = build_excluded_genres(include_animation=include_animation)
@@ -444,10 +563,11 @@ def download_imdb_candidates(
         with gzip.GzipFile(fileobj=resp.raw) as gz:
             reader = csv.DictReader(io.TextIOWrapper(gz, encoding="utf-8"), delimiter="\t")
             for row in reader:
-                if row["titleType"] != "movie" or row["isAdult"] != "0":
-                    continue
                 tconst = row["tconst"]
-                if tconst not in ratings_map:
+                is_manual = tconst in manual_set
+                if row["titleType"] != "movie" or (row["isAdult"] != "0" and not is_manual):
+                    continue
+                if tconst not in ratings_map and not is_manual:
                     continue
                 year_str = row["startYear"]
                 if not year_str.isdigit():
@@ -456,34 +576,35 @@ def download_imdb_candidates(
                 if year < start_year or year > end_year:
                     continue
 
-                rating, votes = ratings_map[tconst]
-                # 最新年・前年のみ投票数下限を緩め、過去年は1万票以上でノイズを除去
+                rating, votes = ratings_map.get(tconst, (7.0, 0))
+                # 最新年・前年のみ投票数下限を緩め、過去年は1万票以上でノイズを除去（manual_picksは無条件通過）
                 min_votes = 3000 if year >= current_year - 1 else 10000
-                if votes < min_votes:
+                if votes < min_votes and not is_manual:
                     continue
 
                 raw_genres = row["genres"]
                 genres = [] if raw_genres == "\\N" else [g.strip() for g in raw_genres.split(",")]
-                if any(g in excluded_genres for g in genres):
+                if not is_manual and any(g in excluded_genres for g in genres):
                     continue
 
                 runtime_str = row["runtimeMinutes"]
                 runtime = int(runtime_str) if runtime_str.isdigit() else None
-                if runtime is not None and runtime < 60:
+                if runtime is not None and runtime < 60 and not is_manual:
                     continue
 
-                by_year[year].append(
-                    {
-                        "imdb_id": tconst,
-                        "release_year": year,
-                        "title_en": row["primaryTitle"],
-                        "original_title": row["originalTitle"],
-                        "runtime_minutes": runtime,
-                        "genres": genres,
-                        "imdb_rating": rating,
-                        "imdb_votes": votes,
-                    }
-                )
+                entry: dict[str, Any] = {
+                    "imdb_id": tconst,
+                    "release_year": year,
+                    "title_en": row["primaryTitle"],
+                    "original_title": row["originalTitle"],
+                    "runtime_minutes": runtime,
+                    "genres": genres,
+                    "imdb_rating": rating,
+                    "imdb_votes": votes,
+                }
+                if is_manual:
+                    entry["is_manual_pick"] = True
+                by_year[year].append(entry)
 
     pruned: dict[int, list[dict[str, Any]]] = {}
     for year in range(start_year, end_year + 1):
@@ -493,6 +614,7 @@ def download_imdb_candidates(
             year=year,
             candidates_per_year=candidates_per_year,
             current_year=current_year,
+            manual_picks=manual_set,
         )
 
     total = sum(len(v) for v in pruned.values())
@@ -603,10 +725,80 @@ def fetch_tmdb_jp_metadata(imdb_id: str, tmdb_api_key: str) -> dict[str, Any]:
     }
 
 
+def compute_newly_flatrate_update(
+    prev_providers: Optional[Dict[str, Any]],
+    new_providers: Dict[str, Any],
+    prev_newly_providers: Optional[list[str]],
+    prev_newly_at: Optional[str],
+    now_dt: Optional[datetime] = None,
+    retention_days: int = 14,
+) -> tuple[list[str], Optional[str]]:
+    """
+    前回の jp_providers と今回の jp_providers を比較し、新しく見放題 (flatrate) に追加された
+    サービスを検知して最大 retention_days 日間保持する純粋関数。
+      - prev_providers が None の場合（初回登録等）は差分なし（既存値を維持するか空）とする。
+      - 新規追加があれば、14日以内の既存新着リスト（現在も flatrate に含まれるもの）とマージし、
+        newly_flatrate_at を現在時刻（ISO文字列）に更新する。
+      - 新規追加がない場合、prev_newly_at が14日未満なら現在も flatrate に残っているサービスを保持。
+        14日以上経過、または現在 flatrate から全て消えた場合は ([], None) にクリアする。
+    """
+    ref_now = now_dt if now_dt is not None else datetime.now(timezone.utc)
+    if ref_now.tzinfo is None:
+        ref_now = ref_now.replace(tzinfo=timezone.utc)
+    else:
+        ref_now = ref_now.astimezone(timezone.utc)
+
+    new_flatrate = [str(p).strip() for p in ((new_providers or {}).get("flatrate") or []) if str(p).strip()]
+    new_flatrate_set = set(new_flatrate)
+
+    prev_newly_list = [str(p).strip() for p in (prev_newly_providers or []) if str(p).strip()]
+    prev_newly_dt = _parse_iso_datetime_utc(prev_newly_at)
+    within_retention = prev_newly_dt is not None and (ref_now - prev_newly_dt) < timedelta(days=retention_days)
+
+    if prev_providers is None:
+        if within_retention:
+            kept = [p for p in prev_newly_list if p in new_flatrate_set]
+            if kept:
+                return kept, prev_newly_at
+        return [], None
+
+    prev_flatrate = [str(p).strip() for p in (prev_providers.get("flatrate") or []) if str(p).strip()]
+    prev_flatrate_set = set(prev_flatrate)
+    added = [p for p in new_flatrate if p not in prev_flatrate_set]
+
+    if added:
+        merged: list[str] = []
+        seen_p: set[str] = set()
+        if within_retention:
+            for p in prev_newly_list:
+                if p in new_flatrate_set and p not in seen_p:
+                    merged.append(p)
+                    seen_p.add(p)
+        for p in added:
+            if p not in seen_p:
+                merged.append(p)
+                seen_p.add(p)
+        return merged, ref_now.isoformat()
+
+    if within_retention:
+        kept = [p for p in prev_newly_list if p in new_flatrate_set]
+        if kept:
+            return kept, prev_newly_at
+
+    return [], None
+
+
 def refresh_all_jp_providers(sb: SupabaseClient, tmdb_api_key: str) -> None:
-    """Supabaseに収録済みの全映画の日本配信状況（JP Watch Providers）を最新化する"""
+    """Supabaseに収録済みの全映画の日本配信状況（JP Watch Providers）と新着見放題を最新化する"""
     print("[4/4] 収録済み全作品の日本配信状況を最新化中...", flush=True)
-    existing = sb.select_all("movies", select="imdb_id,tmdb_id")
+    try:
+        existing = sb.select_all(
+            "movies",
+            select="imdb_id,tmdb_id,jp_providers,newly_flatrate_providers,newly_flatrate_at",
+        )
+    except Exception:
+        existing = sb.select_all("movies", select="imdb_id,tmdb_id,jp_providers")
+
     headers = {"accept": "application/json"}
     prov_params = {}
     if tmdb_api_key.startswith("eyJ"):
@@ -614,7 +806,8 @@ def refresh_all_jp_providers(sb: SupabaseClient, tmdb_api_key: str) -> None:
     else:
         prov_params["api_key"] = tmdb_api_key
 
-    now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    now_dt = dt.datetime.now(dt.timezone.utc)
+    now_iso = now_dt.isoformat()
     updates: list[dict[str, Any]] = []
     for row in existing:
         tmdb_id = row.get("tmdb_id")
@@ -629,15 +822,26 @@ def refresh_all_jp_providers(sb: SupabaseClient, tmdb_api_key: str) -> None:
             )
             resp.raise_for_status()
             jp = (resp.json().get("results") or {}).get("JP") or {}
+            new_providers = {
+                "flatrate": [p["provider_name"] for p in (jp.get("flatrate") or []) if p.get("provider_name")],
+                "rent": [p["provider_name"] for p in (jp.get("rent") or []) if p.get("provider_name")],
+                "buy": [p["provider_name"] for p in (jp.get("buy") or []) if p.get("provider_name")],
+                "link": jp.get("link"),
+            }
+            newly_provs, newly_at = compute_newly_flatrate_update(
+                prev_providers=row.get("jp_providers"),
+                new_providers=new_providers,
+                prev_newly_providers=row.get("newly_flatrate_providers"),
+                prev_newly_at=row.get("newly_flatrate_at"),
+                now_dt=now_dt,
+                retention_days=14,
+            )
             updates.append(
                 {
                     "imdb_id": row["imdb_id"],
-                    "jp_providers": {
-                        "flatrate": [p["provider_name"] for p in (jp.get("flatrate") or [])],
-                        "rent": [p["provider_name"] for p in (jp.get("rent") or [])],
-                        "buy": [p["provider_name"] for p in (jp.get("buy") or [])],
-                        "link": jp.get("link"),
-                    },
+                    "jp_providers": new_providers,
+                    "newly_flatrate_providers": newly_provs,
+                    "newly_flatrate_at": newly_at,
                     "updated_at": now_iso,
                 }
             )
@@ -645,18 +849,65 @@ def refresh_all_jp_providers(sb: SupabaseClient, tmdb_api_key: str) -> None:
         except Exception as exc:
             print(f"  [WARN] 配信取得スキップ ({row['imdb_id']}): {exc}", file=sys.stderr)
 
-    # 部分更新（PATCH）またはupsert用: ここではimdb_idごとにjp_providersだけ安全にPATCH
+    omitted_cols: set[str] = set()
     for item in updates:
         imdb_id = item.pop("imdb_id")
-        resp = requests.patch(
-            f"{sb.base_url}/movies",
-            params={"imdb_id": f"eq.{imdb_id}"},
-            headers=sb.headers,
-            json=item,
-            timeout=20,
-        )
-        resp.raise_for_status()
+        sb.patch_by_imdb_id("movies", imdb_id, item, omitted_cols=omitted_cols)
     print(f"  -> 配信状況の更新完了: {len(updates):,}件", flush=True)
+
+
+def backfill_movies_country_from_cache(
+    sb: SupabaseClient,
+    omdb_cache: dict[str, dict[str, Any]],
+    existing_movies: list[dict[str, Any]] | None = None,
+) -> int:
+    """
+    追加の OMDb / TMDB API 消費ゼロで、既存の omdb_cache.country から
+    movies.country が空の既存レコードをバックフィルする。
+    """
+    rows = existing_movies if existing_movies is not None else sb.select_all("movies", select="imdb_id,country")
+    updated = 0
+    omitted_cols: set[str] = set()
+    for row in rows:
+        if "country" in omitted_cols:
+            break
+        iid = row.get("imdb_id")
+        if not iid or (row.get("country") or "").strip():
+            continue
+        cached_country = (omdb_cache.get(iid, {}).get("country") or "").strip()
+        if not cached_country:
+            continue
+        sb.patch_by_imdb_id("movies", iid, {"country": cached_country}, omitted_cols=omitted_cols)
+        if "country" not in omitted_cols:
+            updated += 1
+    return updated
+
+
+def export_country_map_json(
+    omdb_cache: dict[str, dict[str, Any]],
+    movies_rows: list[dict[str, Any]] | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, str]:
+    """
+    web/country_map.json（{ "ttXXXX": "United States, United Kingdom" }）を生成して書き出す。
+    DBに country カラムが未反映な環境でもフロントエンドが100%製作国を判定できるようにする。
+    """
+    country_map: dict[str, str] = {}
+    for iid, row in (omdb_cache or {}).items():
+        c = (row.get("country") or "").strip()
+        if iid and c:
+            country_map[iid] = c
+    for row in movies_rows or []:
+        iid = row.get("imdb_id")
+        c = (row.get("country") or "").strip()
+        if iid and c:
+            country_map[iid] = c
+
+    path = Path(output_path) if output_path is not None else DEFAULT_COUNTRY_MAP_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = {k: country_map[k] for k in sorted(country_map.keys())}
+    path.write_text(json.dumps(ordered, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return ordered
 
 
 def _parse_iso_datetime_utc(value: Any) -> Optional[datetime]:
@@ -862,11 +1113,16 @@ def main() -> None:
     if sb is not None:
         for row in sb.select_all("omdb_cache"):
             omdb_cache[row["imdb_id"]] = row
-        existing_movie_rows = sb.select_all("movies", select="imdb_id,release_year,ai_summary,mood_tags")
+        existing_movie_rows = sb.select_all(
+            "movies",
+            select="imdb_id,release_year,ai_summary,mood_tags,country,jp_providers,newly_flatrate_providers,newly_flatrate_at",
+        )
         for row in existing_movie_rows:
             yr = row.get("release_year")
             if isinstance(yr, int):
                 existing_movie_counts_by_year[yr] += 1
+
+    existing_movies_by_id = {row["imdb_id"]: row for row in existing_movie_rows if row.get("imdb_id")}
 
     omdb_calls = 0
     new_cache_rows: list[dict[str, Any]] = []
@@ -945,7 +1201,8 @@ def main() -> None:
     print("[3/4] 年別ハイブリッド20本選出 & TMDB日本語・配信情報を取得中...", flush=True)
     all_selected_records: list[dict[str, Any]] = []
     processed_years: dict[int, set[str]] = {}
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt_sync = datetime.now(timezone.utc)
+    now_iso = now_dt_sync.isoformat()
 
     for year in plan["ordered_years_for_sync"]:
         year_cands = candidates_by_year[year]
@@ -976,15 +1233,31 @@ def main() -> None:
                 "awards_text": od.get("awards_text") or None,
                 "awards_bonus": parse_awards_bonus(od.get("awards_text")),
                 "director": od.get("director") or None,
+                "country": od.get("country") or "",
                 "language": od.get("language") or None,
             }
             enriched.append(merged)
 
-        top20 = select_yearly_top20(enriched, target_count=20, top_n=12)
+        top20 = select_yearly_top20(enriched, target_count=20, top_n=12, max_indian_per_year=2)
         processed_years[year] = {item["imdb_id"] for item in top20}
         for item in top20:
             tmdb_info = fetch_tmdb_jp_metadata(item["imdb_id"], tmdb_key)
             time.sleep(0.04)
+            new_providers = tmdb_info.get("jp_providers") or {
+                "flatrate": [],
+                "rent": [],
+                "buy": [],
+                "link": None,
+            }
+            prev_row = existing_movies_by_id.get(item["imdb_id"])
+            newly_provs, newly_at = compute_newly_flatrate_update(
+                prev_providers=prev_row.get("jp_providers") if prev_row else None,
+                new_providers=new_providers,
+                prev_newly_providers=prev_row.get("newly_flatrate_providers") if prev_row else None,
+                prev_newly_at=prev_row.get("newly_flatrate_at") if prev_row else None,
+                now_dt=now_dt_sync,
+                retention_days=14,
+            )
             record = {
                 "imdb_id": item["imdb_id"],
                 "tmdb_id": tmdb_info.get("tmdb_id"),
@@ -999,6 +1272,7 @@ def main() -> None:
                 "runtime_minutes": item.get("runtime_minutes"),
                 "genres": item["genres"],
                 "director": item.get("director"),
+                "country": item.get("country") or "",
                 "selection_slot": item["selection_slot"],
                 "selection_category": item["selection_category"],
                 "composite_score": item["composite_score"],
@@ -1008,8 +1282,9 @@ def main() -> None:
                 "rt_score": item.get("rt_score"),
                 "awards_text": item.get("awards_text"),
                 "awards_bonus": item["awards_bonus"],
-                "jp_providers": tmdb_info.get("jp_providers")
-                or {"flatrate": [], "rent": [], "buy": [], "link": None},
+                "jp_providers": new_providers,
+                "newly_flatrate_providers": newly_provs,
+                "newly_flatrate_at": newly_at,
                 "overview_ja": tmdb_info.get("overview_ja"),
                 "ai_summary": None,
                 "mood_tags": [],
@@ -1044,6 +1319,13 @@ def main() -> None:
     if stale_ids:
         sb.delete_by_imdb_ids("movies", stale_ids)
         print(f"  -> 選出入れ替えに伴う未評価の旧レコード整理: {len(stale_ids)}本削除（視聴記録ありは保護）", flush=True)
+
+    # 既存収録作の country 未設定行を omdb_cache からバックフィル & web/country_map.json を出力
+    backfilled_country = backfill_movies_country_from_cache(sb, omdb_cache)
+    if backfilled_country:
+        print(f"  -> omdb_cache から既存 movies.country を補完: {backfilled_country}本", flush=True)
+    exported_map = export_country_map_json(omdb_cache, upsert_rows)
+    print(f"  -> web/country_map.json 更新完了: {len(exported_map)}件", flush=True)
 
     # 4. 週次モード時は全収録作品の配信状況も一括最新化（＋Supabase無料枠スリープ防止）
     if args.mode == "weekly":

@@ -101,6 +101,44 @@ def compute_composite_score(
     return round(min(100.0, max(0.0, score)), 2)
 
 
+INDIAN_LANGUAGE_CODES = {"hi", "ta", "te", "ml", "kn", "pa", "mr", "gu", "bn"}
+INDIAN_LANGUAGE_NAMES = {
+    "hindi",
+    "tamil",
+    "telugu",
+    "malayalam",
+    "kannada",
+    "punjabi",
+    "marathi",
+    "bengali",
+}
+
+
+def is_indian_movie(c: dict[str, Any]) -> bool:
+    """
+    製作国または原語・主要言語からインド映画かどうかを判定する。
+    """
+    country = str(c.get("country") or "").strip().lower()
+    if country and country != "n/a":
+        countries = [part.strip() for part in country.split(",")]
+        if any(part == "india" or "india" in part for part in countries):
+            return True
+
+    orig_lang = str(c.get("original_language") or "").strip().lower()
+    if orig_lang and orig_lang != "n/a":
+        first_orig = orig_lang.split(",")[0].strip()
+        if first_orig in INDIAN_LANGUAGE_CODES or first_orig in INDIAN_LANGUAGE_NAMES:
+            return True
+
+    lang = str(c.get("language") or "").strip().lower()
+    if lang and lang != "n/a":
+        first_lang = lang.split(",")[0].strip()
+        if first_lang in INDIAN_LANGUAGE_CODES or first_lang in INDIAN_LANGUAGE_NAMES:
+            return True
+
+    return False
+
+
 def _is_non_english(movie: dict[str, Any]) -> bool:
     lang = (movie.get("original_language") or movie.get("language") or "").strip().lower()
     if not lang or lang == "n/a":
@@ -127,10 +165,13 @@ def select_yearly_top20(
     candidates: list[dict[str, Any]],
     target_count: int = 20,
     top_n: int = 12,
+    max_indian_per_year: int = 2,
 ) -> list[dict[str, Any]]:
     """
     1年分の候補リストから、総合上位12本＋ジャンル・非英語圏代表枠8本の
     ハイブリッド編成で最大20本を選出し、year_rank (1..20) を付与して返す。
+    - is_manual_pick == True の作品は年別TOP20へ無条件で優先選出する。
+    - 1年の中でインド映画（is_indian_movie）は合計最大 max_indian_per_year 本までに制限する。
     """
     scored: list[dict[str, Any]] = []
     for item in candidates:
@@ -155,14 +196,43 @@ def select_yearly_top20(
 
     selected: list[dict[str, Any]] = []
     selected_ids: set[str] = set()
+    indian_count = 0
 
-    # 1. 総合上位12本を確定
-    for movie in scored[:top_n]:
+    def _can_pick(movie: dict[str, Any], allow_over_indian_cap: bool = False) -> bool:
+        if movie["imdb_id"] in selected_ids:
+            return False
+        if not allow_over_indian_cap and is_indian_movie(movie) and indian_count >= max_indian_per_year:
+            return False
+        return True
+
+    def _add_selected(movie: dict[str, Any], slot: str, category: str) -> None:
+        nonlocal indian_count
         entry = dict(movie)
-        entry["selection_slot"] = "top12"
-        entry["selection_category"] = "総合TOP12"
+        entry["selection_slot"] = slot
+        entry["selection_category"] = category
         selected.append(entry)
         selected_ids.add(entry["imdb_id"])
+        if is_indian_movie(entry):
+            indian_count += 1
+
+    # 0. manual_picks.txt 指定作品を無条件で優先確保
+    manual_picks = [m for m in scored if m.get("is_manual_pick") is True]
+    for movie in manual_picks:
+        if len(selected) >= target_count:
+            break
+        if movie["imdb_id"] in selected_ids:
+            continue
+        _add_selected(movie, "genre_pick", "注目・代表ピックアップ")
+
+    # 1. 総合上位12本を確定（インド映画は年間 max_indian_per_year 本まで）
+    top12_count = sum(1 for m in selected if m.get("selection_slot") == "top12")
+    for movie in scored:
+        if len(selected) >= target_count or top12_count >= top_n:
+            break
+        if not _can_pick(movie):
+            continue
+        _add_selected(movie, "top12", "総合TOP12")
+        top12_count += 1
 
     # 2. 残り8本をジャンル・非英語圏代表枠から補完
     remaining_pool = [m for m in scored if m["imdb_id"] not in selected_ids]
@@ -172,29 +242,30 @@ def select_yearly_top20(
         for movie in remaining_pool:
             if len(selected) >= target_count or picked_in_bucket >= quota:
                 break
-            if movie["imdb_id"] in selected_ids:
+            if not _can_pick(movie):
                 continue
             if _matches_bucket(movie, bucket_name):
-                entry = dict(movie)
-                entry["selection_slot"] = "genre_pick"
-                entry["selection_category"] = bucket_name
-                selected.append(entry)
-                selected_ids.add(entry["imdb_id"])
+                _add_selected(movie, "genre_pick", bucket_name)
                 picked_in_bucket += 1
 
     # 3. もし枠に空きが残った場合は総合スコア次点から補充
     for movie in remaining_pool:
         if len(selected) >= target_count:
             break
-        if movie["imdb_id"] in selected_ids:
+        if not _can_pick(movie):
             continue
-        entry = dict(movie)
-        entry["selection_slot"] = "genre_pick"
-        entry["selection_category"] = "総合次点枠"
-        selected.append(entry)
-        selected_ids.add(entry["imdb_id"])
+        _add_selected(movie, "genre_pick", "総合次点枠")
 
-    # 最終表示順: 総合TOP12をスコア順 → ジャンル代表枠をスコア順
+    # 4. 非インド映画だけでは target_count に達しない極端なケースのみキャップを緩めて補充
+    if len(selected) < target_count:
+        for movie in remaining_pool:
+            if len(selected) >= target_count:
+                break
+            if not _can_pick(movie, allow_over_indian_cap=True):
+                continue
+            _add_selected(movie, "genre_pick", "総合次点枠")
+
+    # 最終表示順: 総合TOP12をスコア順 → ジャンル代表枠・ピックアップをスコア順
     selected.sort(
         key=lambda x: (
             0 if x["selection_slot"] == "top12" else 1,
