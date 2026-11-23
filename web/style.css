@@ -3646,3 +3646,201 @@ input[type="date"] {
   }
 }
 
+/* ============================================================================
+   📅 視聴日不明トグル・シネマフォールバックカード・背景コンパクトヘッダー
+   ============================================================================ */
+
+.unknown-date-toggle {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  border-radius: 9px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.unknown-date-toggle.is-active {
+  background: var(--gold-soft);
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
+}
+
+.is-hidden-fallback {
+  display: none !important;
+}
+
+.cinema-fallback {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(245, 158, 11, 0.16), transparent 55%),
+    radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.12), transparent 55%),
+    linear-gradient(155deg, #1b2236 0%, #0b0e17 100%);
+  position: relative;
+}
+
+.fallback-cinema-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  margin-bottom: 6px;
+  opacity: 0.9;
+  z-index: 2;
+}
+
+.cinema-thumb-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  text-align: center;
+  background: linear-gradient(155deg, #1d2438 0%, #0d1019 100%);
+}
+
+.thumb-fb-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.thumb-fb-title {
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-all;
+}
+
+.modal-poster-box {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.modal-poster-box.is-fallback-active {
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--border-subtle);
+}
+
+.modal-poster-fallback-wrap {
+  border-radius: 10px;
+}
+
+.gacha-poster-box {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gacha-poster-box.is-fallback-active {
+  border: 1px solid var(--border-subtle);
+}
+
+.gacha-poster-fallback-inner {
+  padding: 10px 8px;
+}
+
+.battle-result-poster-wrap {
+  width: 68px;
+  height: 102px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.battle-result-poster-wrap .battle-poster-fallback {
+  padding: 6px;
+}
+
+.battle-result-poster-wrap .battle-poster-fallback strong {
+  font-size: 0.68rem;
+}
+
+.battle-result-poster-wrap .battle-poster-fallback span {
+  display: none;
+}
+
+.modal-backdrop-banner {
+  overflow: hidden;
+  background: linear-gradient(155deg, #161b29 0%, #090b10 100%);
+}
+
+.modal-backdrop-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.modal-content-inner.has-backdrop {
+  padding: 16px 20px 20px;
+}
+
+.modal-content-inner.is-compact-header {
+  padding: 0;
+}
+
+.tg-rec-item {
+  grid-template-columns: 24px 34px 1fr auto;
+}
+
+.tg-rec-thumb-wrap {
+  width: 34px;
+  height: 50px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #141824;
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.tg-rec-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.log-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.log-filter-bar .log-year-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.log-year-select-wrap {
+  flex: 0 0 auto;
+  min-width: 155px;
+}
+
+.log-date-badge.is-unset {
+  color: var(--gold-bright);
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.35);
+  border-style: dashed;
+}
+
+@media (max-width: 640px) {
+  .unknown-date-toggle {
+    font-size: 0.72rem;
+    padding: 5px 8px;
+  }
+
+  .modal-poster-box.is-fallback-active {
+    max-width: 150px;
+  }
+
+  .log-year-select-wrap {
+    width: 100%;
+  }
+}

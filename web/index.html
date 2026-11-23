@@ -45,7 +45,7 @@
         </div>
         <div class="tg-header-right">
           <span id="tg-summary-pill" class="tg-summary-pill">読み込み中...</span>
-          <button id="tg-collapse-btn" type="button" class="btn btn-ghost tg-collapse-btn" aria-label="パネルを閉じる">✕ 閉じる</button>
+          <button id="tg-collapse-btn" type="button" class="btn btn-ghost tg-collapse-btn" aria-label="パネルを閉じる">&times; 閉じる</button>
         </div>
       </div>
 
@@ -217,6 +217,10 @@
             <span class="legend-item"><span class="dot dot-genre"></span>代表枠</span>
           </div>
           <button id="results-ranking-btn" type="button" class="btn btn-secondary results-ranking-btn" aria-pressed="false">🏆 マイランキング <span id="results-ranking-count" class="ranking-count-badge">0</span></button>
+          <label class="checkbox-label unknown-date-toggle" title="ONの状態で「観た」や★評価を付けた作品は視聴日（日付未設定）として記録されます">
+            <input id="toggle-unknown-watched-date" type="checkbox" />
+            <span>📅 視聴日不明</span>
+          </label>
           <div class="view-mode-toggle" role="group" aria-label="表示切り替え">
             <button id="view-mode-card" type="button" class="view-mode-btn active" data-view-mode="card" aria-pressed="true" title="カード表示">▦ カード</button>
             <button id="view-mode-list" type="button" class="view-mode-btn" data-view-mode="list" aria-pressed="false" title="高速採点リスト表示">☰ リスト</button>
@@ -270,7 +274,7 @@
           <h2>🎲 今夜の3本ガチャ</h2>
           <p id="gacha-subtitle" class="gacha-subtitle"></p>
         </div>
-        <button type="button" class="icon-close" data-close-modal="gacha-modal" aria-label="閉じる">✕</button>
+        <button type="button" class="icon-close" data-close-modal="gacha-modal" aria-label="閉じる">&times;</button>
       </div>
       <div id="gacha-results" class="gacha-results"></div>
       <div class="gacha-footer">
@@ -285,7 +289,7 @@
     <form id="auth-form" class="auth-form">
       <div class="modal-header">
         <h2>記録用ログイン</h2>
-        <button type="button" class="icon-close" data-close-modal="auth-modal" aria-label="閉じる">✕</button>
+        <button type="button" class="icon-close" data-close-modal="auth-modal" aria-label="閉じる">&times;</button>
       </div>
       <p class="auth-note">未ログインでもブラウザに即時保存されます。ログインするとSupabaseクラウドと自動同期します（オーナーのみ書き込み可）。</p>
       <label for="auth-email">メールアドレス</label>

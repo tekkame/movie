@@ -220,14 +220,52 @@ const DEMO_MOVIES = [
 ];
 
 const DEFAULT_TASTE_PROFILE = {
-  critics_weight: 0.5,
-  audience_weight: 0.4,
+  critics_weight: 0.4,
+  audience_weight: 0.5,
   awards_weight: 0.1,
-  genre_weights: {},
-  favorite_directors: [],
-  preferred_decades: [],
+  genre_weights: {
+    Thriller: 4.5,
+    "Sci-Fi": 4.0,
+    Horror: 4.0,
+    Crime: 3.5,
+    Mystery: 3.0,
+    Action: 2.5,
+    Adventure: 2.0,
+    Musical: 1.5,
+    Comedy: 0.5,
+    Drama: 0.0,
+    Animation: 0.0,
+    Fantasy: 0.0,
+    Music: 0.0,
+    Romance: -1.5,
+    Family: -4.0,
+  },
+  favorite_directors: [
+    "Christopher Nolan",
+    "Ryan Coogler",
+    "Sean Baker",
+    "Todd Phillips",
+    "Neill Blomkamp",
+    "Bong Joon Ho",
+    "Jordan Peele",
+    "Edgar Wright",
+    "Paul Thomas Anderson",
+    "Satoshi Kon",
+    "Steven Spielberg",
+    "Wes Anderson",
+    "Park Chan-wook",
+    "Quentin Tarantino",
+    "Ryusuke Hamaguchi",
+    "Hayao Miyazaki",
+    "Makoto Shinkai",
+    "Takashi Yamazaki",
+    "Joseph Kosinski",
+    "Takehiko Inoue",
+  ],
+  preferred_decades: [2020, 2010, 2000],
   max_preferred_runtime: null,
-  summary: "初期設定",
+  summary:
+    "ノーラン作品（TOP10に4本）や『罪人たち』のような、圧倒的な映像・音響・構造美で没入させる体感型SF／スリラー／ホラーや、毒気とキレのあるジャンル傑作・本格日本アニメを熱烈に支持。一方、静かな内省系ドラマ・ほろ苦い恋愛劇・王道ファミリーアニメにはシビアな観客体験重視の本格派。",
 };
 
 const IMPRESSION_TAG_GROUPS = [
@@ -250,6 +288,7 @@ const LOCAL_WATCH_STORAGE_KEY = "core_cinema_demo_watch";
 const TASTE_PANEL_OPEN_KEY = "core_cinema_taste_panel_open_v3";
 const FILTER_PREFS_STORAGE_KEY = "core_cinema_filter_prefs_v3";
 const VIEW_MODE_STORAGE_KEY = "core_cinema_view_mode_v3";
+const UNKNOWN_WATCHED_DATE_KEY = "core_cinema_unknown_watched_date_v1";
 
 const state = {
   supabase: null,
@@ -271,6 +310,7 @@ const state = {
   activeTasteTab: "taste", // "taste" | "guide"
   isTastePanelOpen: false,
   viewMode: "card", // "card" | "list"
+  unknownWatchedDate: false,
   activeMainView: "browse", // "browse" | "ranking"
   activeRankingTab: "best", // "best" | "log"
   selectedLogYear: "all",
@@ -302,6 +342,99 @@ function escapeHtml(str) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str).replaceAll("'", "&#39;");
+}
+
+function buildCinemaFallbackHtml(movie, variant = "card") {
+  const titleJa = movie?.title_ja || movie?.title_en || "No Title";
+  const titleEn = movie?.title_en || "";
+  const yearText = movie?.release_year ? `${movie.release_year}年` : "";
+  if (variant === "thumb") {
+    return `<div class="list-thumb-fallback cinema-thumb-fallback" title="${escapeHtml(titleJa)} (${escapeHtml(yearText)})"><span class="thumb-fb-icon" aria-hidden="true">🎬</span><span class="thumb-fb-title">${escapeHtml(titleJa.slice(0, 6))}</span></div>`;
+  }
+  const subText = [yearText, titleEn].filter(Boolean).join(" · ");
+  const extraClass =
+    variant === "battle"
+      ? "battle-poster-fallback cinema-fallback"
+      : variant === "similar"
+        ? "similar-poster-fallback cinema-fallback"
+        : variant === "gacha"
+          ? "poster-fallback cinema-fallback gacha-poster-fallback-inner"
+          : "poster-fallback cinema-fallback";
+  return `<div class="${extraClass}"><span class="fallback-cinema-icon" aria-hidden="true">🎬</span><strong>${escapeHtml(titleJa)}</strong>${subText ? `<span>${escapeHtml(subText)}</span>` : ""}</div>`;
+}
+
+function renderPosterImageOrFallback(movie, { variant = "card", imgClass = "", extraWrapperClass = "" } = {}) {
+  const url = movie?.poster_url ? String(movie.poster_url).trim() : "";
+  const fallbackHtml = buildCinemaFallbackHtml(movie, variant);
+  if (!url) {
+    if (variant === "modal") {
+      return `<div class="poster-wrap modal-poster-fallback-wrap">${fallbackHtml}</div>`;
+    }
+    if (variant === "gacha") {
+      return `<div class="poster-wrap gacha-poster-fallback">${fallbackHtml}</div>`;
+    }
+    return fallbackHtml;
+  }
+  const clsAttr = imgClass ? ` class="${escapeHtml(imgClass)}"` : "";
+  const loadingAttr = variant === "card" || variant === "thumb" || variant === "similar" ? ` loading="lazy"` : "";
+  if (variant === "modal") {
+    return `<div class="modal-poster-box ${escapeHtml(extraWrapperClass)}"><img${clsAttr} src="${escapeHtml(url)}" alt="${escapeHtml(movie?.title_ja || "")}" data-poster-fallback="true" />${fallbackHtml.replace('class="', 'class="is-hidden-fallback ')}</div>`;
+  }
+  if (variant === "gacha") {
+    return `<div class="gacha-poster-box"><img${clsAttr} src="${escapeHtml(url)}" alt="${escapeHtml(movie?.title_ja || "")}" data-poster-fallback="true" />${fallbackHtml.replace('class="', 'class="is-hidden-fallback ')}</div>`;
+  }
+  return `<img${clsAttr} src="${escapeHtml(url)}" alt="${escapeHtml(movie?.title_ja || "")}"${loadingAttr} data-poster-fallback="true" />${fallbackHtml.replace('class="', 'class="is-hidden-fallback ')}`;
+}
+
+function attachPosterErrorHandlers(root = document) {
+  if (!root) return;
+  root.querySelectorAll('img[data-poster-fallback="true"]').forEach((img) => {
+    if (img.dataset.fallbackBound === "1") return;
+    img.dataset.fallbackBound = "1";
+    const triggerFallback = () => {
+      img.style.display = "none";
+      const next = img.nextElementSibling;
+      if (next && next.classList.contains("is-hidden-fallback")) {
+        next.classList.remove("is-hidden-fallback");
+      }
+      const parentBox = img.closest(".modal-poster-box, .gacha-poster-box");
+      if (parentBox) {
+        parentBox.classList.add("is-fallback-active");
+      }
+    };
+    img.addEventListener("error", triggerFallback, { once: true });
+    if (img.complete && img.naturalWidth === 0) {
+      triggerFallback();
+    }
+  });
+}
+
+function loadUnknownWatchedDatePref() {
+  try {
+    return localStorage.getItem(UNKNOWN_WATCHED_DATE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setUnknownWatchedDatePref(enabled, { persist = true } = {}) {
+  state.unknownWatchedDate = Boolean(enabled);
+  const checkbox = document.getElementById("toggle-unknown-watched-date");
+  if (checkbox) {
+    checkbox.checked = state.unknownWatchedDate;
+    checkbox.closest(".unknown-date-toggle")?.classList.toggle("is-active", state.unknownWatchedDate);
+  }
+  if (persist) {
+    try {
+      localStorage.setItem(UNKNOWN_WATCHED_DATE_KEY, state.unknownWatchedDate ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function getTodayDateString() {
@@ -391,6 +524,10 @@ function loadWatchedAtCache() {
     const raw = JSON.parse(localStorage.getItem(WATCHED_AT_CACHE_KEY) || "{}");
     const result = {};
     for (const [id, dtStr] of Object.entries(raw || {})) {
+      if (dtStr === "__CLEARED__") {
+        result[id] = "__CLEARED__";
+        continue;
+      }
       const norm = normalizeWatchedAt(dtStr);
       if (norm) result[id] = norm;
     }
@@ -400,12 +537,14 @@ function loadWatchedAtCache() {
   }
 }
 
-function saveWatchedAtCacheEntry(imdbId, watchedAt) {
+function saveWatchedAtCacheEntry(imdbId, watchedAt, { explicitClear = false } = {}) {
   try {
     const cache = loadWatchedAtCache();
     const norm = normalizeWatchedAt(watchedAt);
     if (norm) {
       cache[imdbId] = norm;
+    } else if (explicitClear) {
+      delete cache[imdbId];
     } else {
       delete cache[imdbId];
     }
@@ -516,7 +655,7 @@ function isMeaningfulWatchEntry(entry) {
   );
 }
 
-function applyCachedFieldsToEntry(imdbId, entry, { tagsCache, rankCache, watchedAtCache }) {
+function applyCachedFieldsToEntry(imdbId, entry, { tagsCache, rankCache, watchedAtCache, allowWatchedAtFallback = true }) {
   const norm = normalizeWatchEntry(entry);
   if (norm.impression_tags.length === 0 && Array.isArray(tagsCache[imdbId])) {
     norm.impression_tags = tagsCache[imdbId];
@@ -524,7 +663,7 @@ function applyCachedFieldsToEntry(imdbId, entry, { tagsCache, rankCache, watched
   if (norm.personal_rank == null && rankCache[imdbId] != null) {
     norm.personal_rank = rankCache[imdbId];
   }
-  if (norm.watched_at == null && watchedAtCache[imdbId]) {
+  if (allowWatchedAtFallback && norm.watched_at == null && watchedAtCache[imdbId] && watchedAtCache[imdbId] !== "__CLEARED__") {
     norm.watched_at = watchedAtCache[imdbId];
   }
   return norm;
@@ -760,7 +899,7 @@ function renderNewlyFlatrateBanner() {
     </div>
     <div class="newly-banner-actions">
       <button type="button" class="btn btn-secondary newly-banner-view-btn ${activeFilterClass}" data-newly-action="filter">${state.newlyFlatrateFilterActive ? "一覧に戻す" : "見る"}</button>
-      <button type="button" class="newly-banner-close-btn" data-newly-action="dismiss" aria-label="通知を閉じる">✕</button>
+      <button type="button" class="newly-banner-close-btn" data-newly-action="dismiss" aria-label="通知を閉じる">&times;</button>
     </div>
   `;
 }
@@ -890,12 +1029,12 @@ function buildUserPreferenceSignals() {
 
 function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals = null) {
   const profile = tasteProfile || DEFAULT_TASTE_PROFILE;
-  const cw = Number(profile.critics_weight ?? 0.5);
-  const aw = Number(profile.audience_weight ?? 0.4);
+  const cw = Number(profile.critics_weight ?? 0.4);
+  const aw = Number(profile.audience_weight ?? 0.5);
   const ww = Number(profile.awards_weight ?? 0.1);
   const totalWeight = cw + aw + ww;
-  const normCw = totalWeight > 0 ? cw / totalWeight : 0.5;
-  const normAw = totalWeight > 0 ? aw / totalWeight : 0.4;
+  const normCw = totalWeight > 0 ? cw / totalWeight : 0.4;
+  const normAw = totalWeight > 0 ? aw / totalWeight : 0.5;
   const normWw = totalWeight > 0 ? ww / totalWeight : 0.1;
 
   const audience100 = movie.imdb_rating != null ? Number(movie.imdb_rating) * 10 : Number(movie.composite_score || 70);
@@ -905,28 +1044,32 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
   const critic100 = criticValues.length > 0 ? criticValues.reduce((a, b) => a + b, 0) / criticValues.length : audience100 * 0.92;
   const awards100 = inferAwardsBonus(movie) * 10; // 0〜100スケールに正規化
 
-  let score = critic100 * normCw + audience100 * normAw + awards100 * normWw;
+  let baseScore = critic100 * normCw + audience100 * normAw + awards100 * normWw;
 
   // 批評家スコアも少なく投票数も少ないローカル作品はマッチ度でも補正
   if (criticValues.length === 0 && movie.imdb_votes != null && Number(movie.imdb_votes) < 80000) {
-    score *= 0.85;
+    baseScore *= 0.85;
   }
 
-  // ジャンル重み (genre_weights: 加減点数値 例: +8 / -10、または倍率 1.15 の両方を安全にサポート)
+  // ジャンル重み: 複数ジャンルで加算が過飽和しないよう sqrt(一致数) で正規化し上限[-10, +9]に調整
   const genreWeights = profile.genre_weights && typeof profile.genre_weights === "object" ? profile.genre_weights : {};
   const movieGenres = Array.isArray(movie.genres) ? movie.genres : [];
-  let genreAdjustment = 0;
+  const matchedGenreVals = [];
   for (const g of movieGenres) {
     if (genreWeights[g] != null && !Number.isNaN(Number(genreWeights[g]))) {
       const val = Number(genreWeights[g]);
       if (val > 0 && val <= 2.0 && !Number.isInteger(val)) {
-        genreAdjustment += (val - 1.0) * 15;
+        matchedGenreVals.push((val - 1.0) * 15);
       } else {
-        genreAdjustment += val;
+        matchedGenreVals.push(val);
       }
     }
   }
-  score += Math.max(-20, Math.min(20, genreAdjustment));
+  const genreAdjustment =
+    matchedGenreVals.length > 0
+      ? matchedGenreVals.reduce((a, b) => a + b, 0) / Math.sqrt(matchedGenreVals.length)
+      : 0;
+  let score = baseScore * 0.92 + Math.max(-10, Math.min(9, genreAdjustment));
 
   // お気に入り監督一致ボーナス
   const favDirectors = Array.isArray(profile.favorite_directors)
@@ -934,7 +1077,7 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
     : [];
   const movieDirectorLower = String(movie.director || "").toLowerCase();
   if (movieDirectorLower && favDirectors.some((d) => movieDirectorLower.includes(d))) {
-    score += 8;
+    score += 5.5;
   }
 
   // 好みの年代一致ボーナス
@@ -947,7 +1090,7 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
       return s === movieDecadeStr || s === String(movieDecadeStart);
     });
     if (matchedDecade) {
-      score += 5;
+      score += 3.0;
     }
   }
 
@@ -957,39 +1100,54 @@ function computeMatchScore(movie, tasteProfile = state.tasteProfile, userSignals
     const rt = Number(movie.runtime_minutes);
     if (!Number.isNaN(maxRt) && maxRt > 0) {
       if (rt <= maxRt) {
-        score += 2;
+        score += 1.5;
       } else {
         const excess = rt - maxRt;
-        score -= Math.min(10, Math.ceil(excess / 10) * 2);
+        score -= Math.min(8, Math.ceil(excess / 10) * 2);
       }
     }
   }
 
-  // ユーザーがリアルタイムに付けた★評価履歴（ジャンル・監督・年代）からも動的に学習して加算
+  // ユーザーがリアルタイムに付けた★評価履歴からも件数でベイズ縮小した平均偏差を加算（累積による99%飽和を防止）
   if (userSignals && userSignals.ratedCount > 0) {
     let personalDelta = 0;
+    const genreCountMap = new Map((userSignals.genreStats || []).map((gs) => [gs.genre, gs]));
+    const gDeltas = [];
     for (const g of movieGenres) {
-      if (userSignals.genreScores[g]) {
-        personalDelta += Math.max(-4.5, Math.min(4.5, userSignals.genreScores[g] * 1.1));
+      const st = genreCountMap.get(g);
+      if (st) {
+        gDeltas.push(st.deltaSum / (st.count + 3));
       }
     }
+    if (gDeltas.length > 0) {
+      const gAvg = gDeltas.reduce((a, b) => a + b, 0) / gDeltas.length;
+      personalDelta += Math.max(-3.0, Math.min(3.0, gAvg * 3.0));
+    }
     if (movie.director) {
+      const dirCountMap = new Map((userSignals.directorStats || []).map((ds) => [ds.key, ds]));
       for (const d of String(movie.director).split(",").map((s) => s.trim().toLowerCase())) {
-        if (userSignals.directorScores[d]) {
-          personalDelta += Math.max(-6, Math.min(6, userSignals.directorScores[d] * 2.5));
+        const st = dirCountMap.get(d);
+        if (st) {
+          personalDelta += Math.max(-4.0, Math.min(4.0, (st.deltaSum / (st.count + 2)) * 4.5));
         }
       }
     }
     if (movie.release_year && userSignals.decadeScores) {
       const decKey = String(Math.floor(Number(movie.release_year) / 10) * 10);
       if (userSignals.decadeScores[decKey]) {
-        personalDelta += Math.max(-2.5, Math.min(2.5, userSignals.decadeScores[decKey] * 0.4));
+        const shrunk = userSignals.decadeScores[decKey] / 12;
+        personalDelta += Math.max(-1.5, Math.min(1.5, shrunk * 1.5));
       }
     }
-    score += Math.max(-10, Math.min(10, personalDelta));
+    score += Math.max(-6.0, Math.min(6.0, personalDelta));
   }
 
-  return Math.round(Math.max(0, Math.min(100, score)));
+  // 上位域（91%超）をソフト圧縮して99%への張り付きを防ぐ
+  if (score > 91) {
+    score = 91 + (score - 91) * 0.55;
+  }
+
+  return Math.round(Math.max(0, Math.min(99, score)));
 }
 
 function buildRecommendationReason(movie, userSignals) {
@@ -1300,6 +1458,9 @@ function renderTasteAnalyticsDashboard() {
             return `
               <button type="button" class="tg-rec-item" data-open-movie="${escapeHtml(m.imdb_id)}">
                 <div class="tg-rec-rank">#${idx + 1}</div>
+                <div class="tg-rec-thumb-wrap">
+                  ${renderPosterImageOrFallback(m, { variant: "thumb" })}
+                </div>
                 <div class="tg-rec-main">
                   <div class="tg-rec-title-row">
                     <span class="tg-rec-title">${escapeHtml(m.title_ja)}</span>
@@ -1354,6 +1515,7 @@ function renderTasteAnalyticsDashboard() {
       <div class="tg-recs-list">${recsHtml}</div>
     </div>
   `;
+  attachPosterErrorHandlers(container);
 }
 
 function openAuthModal() {
@@ -1409,6 +1571,7 @@ async function initApp() {
   } catch {
     state.viewMode = "card";
   }
+  state.unknownWatchedDate = loadUnknownWatchedDatePref();
 
   const cfg = getConfig();
   if (cfg && window.supabase) {
@@ -1446,6 +1609,7 @@ async function initApp() {
   updateAuthUI();
   setTastePanelOpen(false);
   setViewMode(state.viewMode, { persist: false, rerender: false });
+  setUnknownWatchedDatePref(state.unknownWatchedDate, { persist: false });
   setMobileFiltersOpen(false);
   bindEvents();
   renderMovies();
@@ -1494,7 +1658,7 @@ function mergeWatchEntry(remoteEntry, localEntry) {
     return {
       ...localNorm,
       personal_rank: localNorm.personal_rank != null ? localNorm.personal_rank : remoteNorm.personal_rank,
-      watched_at: localNorm.watched_at || remoteNorm.watched_at || null,
+      watched_at: localNorm.watched_at ?? null,
       impression_tags:
         localNorm.impression_tags.length > 0 ? localNorm.impression_tags : remoteNorm.impression_tags,
       memo: localNorm.memo || remoteNorm.memo,
@@ -1503,7 +1667,7 @@ function mergeWatchEntry(remoteEntry, localEntry) {
   return {
     ...remoteNorm,
     personal_rank: remoteNorm.personal_rank != null ? remoteNorm.personal_rank : localNorm.personal_rank,
-    watched_at: remoteNorm.watched_at || localNorm.watched_at || null,
+    watched_at: remoteNorm.watched_at ?? null,
     impression_tags:
       remoteNorm.impression_tags.length > 0 ? remoteNorm.impression_tags : localNorm.impression_tags,
   };
@@ -1543,10 +1707,13 @@ async function loadSupabaseData() {
   }
 
   for (const row of watchRes.data || []) {
+    // DB上で watched_at カラムが明示的に null の行はそのまま「日付未設定」として扱う（キャッシュで上書きしない）
+    const hasWatchedAtCol = Object.prototype.hasOwnProperty.call(row, "watched_at");
     const norm = applyCachedFieldsToEntry(row.imdb_id, row, {
       tagsCache,
       rankCache,
       watchedAtCache,
+      allowWatchedAtFallback: !hasWatchedAtCol,
     });
     remoteMap[row.imdb_id] = norm;
   }
@@ -1565,6 +1732,7 @@ async function loadSupabaseData() {
       tagsCache,
       rankCache,
       watchedAtCache,
+      allowWatchedAtFallback: !Object.prototype.hasOwnProperty.call(localEntry, "watched_at"),
     });
     if (!remoteMap[id]) {
       if (isMeaningfulWatchEntry(enrichedLocal)) {
@@ -1590,9 +1758,11 @@ async function loadSupabaseData() {
     }
   }
 
+  // 未登録の行のみ watchedAtCache を補完（remoteに存在し watched_at: null の行は日付未設定を尊重）
   for (const [id, dtStr] of Object.entries(watchedAtCache)) {
     if (!validMovieIds.has(id)) continue;
-    if (state.watchMap[id] && !state.watchMap[id].watched_at) {
+    if (dtStr === "__CLEARED__") continue;
+    if (!remoteMap[id] && state.watchMap[id] && !state.watchMap[id].watched_at) {
       state.watchMap[id].watched_at = dtStr;
     }
   }
@@ -2113,11 +2283,7 @@ function renderListRow(m) {
   return `
     <article class="${rowClasses}" data-imdb-id="${escapeHtml(m.imdb_id)}">
       <div class="list-thumb-wrap">
-        ${
-          m.poster_url
-            ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
-            : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
-        }
+        ${renderPosterImageOrFallback(m, { variant: "thumb" })}
       </div>
       <div class="list-main">
         <div class="list-meta-line">
@@ -2160,6 +2326,7 @@ function renderMovies() {
 
   if (state.viewMode === "list") {
     grid.innerHTML = list.map(renderListRow).join("");
+    attachPosterErrorHandlers(grid);
     return;
   }
 
@@ -2200,11 +2367,7 @@ function renderMovies() {
       return `
         <article class="${cardClasses}" data-imdb-id="${escapeHtml(m.imdb_id)}">
           <div class="poster-wrap">
-            ${
-              m.poster_url
-                ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
-                : `<div class="poster-fallback"><strong>${escapeHtml(m.title_ja)}</strong><span>${escapeHtml(m.title_en)}</span></div>`
-            }
+            ${renderPosterImageOrFallback(m, { variant: "card", imgClass: "card-poster" })}
             <span class="score-pill">${Number(m.composite_score).toFixed(1)}</span>
             <span class="slot-pill ${slotClass}">${escapeHtml(m.selection_category)}</span>
             <div class="poster-bottom-badges">
@@ -2236,6 +2399,7 @@ function renderMovies() {
       `;
     })
     .join("");
+  attachPosterErrorHandlers(grid);
 }
 
 function isMissingColumnError(error, columnName) {
@@ -2409,12 +2573,13 @@ async function applyRankedOrder(orderedImdbIds, removedImdbIds = []) {
     const prev = normalizeWatchEntry(state.watchMap[imdbId]);
     const nextStatus = "watched";
     const nextRank = idx + 1;
+    const nextWatchedAt = prev.watched_at || (state.unknownWatchedDate ? null : todayStr);
     updatedEntries.push({
       ...prev,
       imdb_id: imdbId,
       status: nextStatus,
       personal_rank: nextRank,
-      watched_at: prev.watched_at || todayStr,
+      watched_at: nextWatchedAt,
       updated_at: nowIso,
     });
   });
@@ -2472,12 +2637,20 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
       nextWatchedAt = null;
     } else {
       nextStatus = "watched";
-      nextWatchedAt = prev.watched_at || getTodayDateString();
+      if (state.unknownWatchedDate) {
+        nextWatchedAt = prev.watched_at || null;
+      } else {
+        nextWatchedAt = prev.watched_at || getTodayDateString();
+      }
     }
   } else if (action === "rate") {
     nextStatus = "watched";
     nextRating = Number(ratingValue);
-    nextWatchedAt = prev.watched_at || getTodayDateString();
+    if (state.unknownWatchedDate) {
+      nextWatchedAt = prev.watched_at || null;
+    } else {
+      nextWatchedAt = prev.watched_at || getTodayDateString();
+    }
   }
 
   const payload = {
@@ -2497,7 +2670,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
     saveLocalWatchEntry(imdbId, payload);
   }
   savePersonalRankCacheEntry(imdbId, payload.personal_rank);
-  saveWatchedAtCacheEntry(imdbId, payload.watched_at);
+  saveWatchedAtCacheEntry(imdbId, payload.watched_at, { explicitClear: payload.watched_at == null });
   renderMovies();
 
   const { error, mode } = await upsertWatchStatus(payload);
@@ -2533,9 +2706,7 @@ async function handleQuickAction(action, imdbId, ratingValue = null) {
    ============================================================================ */
 
 function buildBattleCardHtml(movie, roleLabel, roleSub, sideKey, rankBadgeText = null) {
-  const posterHtml = movie.poster_url
-    ? `<img class="battle-poster" src="${escapeHtml(movie.poster_url)}" alt="${escapeHtml(movie.title_ja)}" />`
-    : `<div class="battle-poster-fallback"><strong>${escapeHtml(movie.title_ja)}</strong><span>${escapeHtml(movie.title_en)}</span></div>`;
+  const posterHtml = renderPosterImageOrFallback(movie, { variant: "battle", imgClass: "battle-poster" });
 
   const w = normalizeWatchEntry(state.watchMap[movie.imdb_id]);
   const ratingChip = w.my_rating != null ? `<span class="battle-star-chip">★${w.my_rating}</span>` : "";
@@ -2570,9 +2741,7 @@ function renderBattleModal() {
 
   if (b.phase === "result") {
     const nextMovie = queueRemaining > 0 ? b.queue[0] : null;
-    const posterHtml = target.poster_url
-      ? `<img class="battle-result-poster" src="${escapeHtml(target.poster_url)}" alt="${escapeHtml(target.title_ja)}" />`
-      : `<div class="battle-poster-fallback battle-result-poster"><strong>${escapeHtml(target.title_ja)}</strong></div>`;
+    const posterHtml = renderPosterImageOrFallback(target, { variant: "battle", imgClass: "battle-result-poster" });
 
     body.innerHTML = `
       <div class="modal-header battle-modal-header">
@@ -2580,12 +2749,12 @@ function renderBattleModal() {
           <h2>⚔️ 2択バトル結果</h2>
           <p class="battle-subtitle">歴代マイランキングを更新しました</p>
         </div>
-        <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">✕</button>
+        <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">&times;</button>
       </div>
       <div class="battle-result-box">
         <div class="battle-result-crown">🏆 歴代 ${b.decidedRank}位 に決定！</div>
         <div class="battle-result-movie">
-          ${posterHtml}
+          <div class="battle-result-poster-wrap">${posterHtml}</div>
           <div class="battle-result-info">
             <h3>${escapeHtml(target.title_ja)}</h3>
             <p>${target.release_year}年 / 監督: ${escapeHtml(target.director || "不明")}</p>
@@ -2603,6 +2772,7 @@ function renderBattleModal() {
         </div>
       </div>
     `;
+    attachPosterErrorHandlers(body);
     return;
   }
 
@@ -2621,7 +2791,7 @@ function renderBattleModal() {
           ${queueRemaining > 0 ? `<span class="battle-progress-chip battle-progress-queue">連続待機 残り${queueRemaining}本</span>` : ""}
         </div>
       </div>
-      <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">✕</button>
+      <button type="button" class="icon-close" data-close-modal="battle-modal" aria-label="閉じる">&times;</button>
     </div>
 
     <div class="battle-arena">
@@ -2635,6 +2805,7 @@ function renderBattleModal() {
       <button type="button" class="btn btn-ghost" data-close-modal="battle-modal">中断して閉じる</button>
     </div>
   `;
+  attachPosterErrorHandlers(body);
 }
 
 async function finalizeBattlePlacement(insertIndex) {
@@ -2648,14 +2819,15 @@ async function finalizeBattlePlacement(insertIndex) {
   b.decidedRank = insertIndex + 1;
   b.phase = "result";
 
-  // 参加時にwatchedでなければ自動でwatched & watched_atをセットしたうえで連番保存
+  // 参加時にwatchedでなければ自動でwatched & watched_atをセット（視聴日不明モード時はnullのまま）
   const prevTarget = normalizeWatchEntry(state.watchMap[b.targetMovie.imdb_id]);
+  const nextWatchedAt = prevTarget.watched_at || (state.unknownWatchedDate ? null : getTodayDateString());
   state.watchMap[b.targetMovie.imdb_id] = normalizeWatchEntry({
     ...prevTarget,
     imdb_id: b.targetMovie.imdb_id,
     status: "watched",
     personal_rank: b.decidedRank,
-    watched_at: prevTarget.watched_at || getTodayDateString(),
+    watched_at: nextWatchedAt,
   });
 
   renderBattleModal();
@@ -2749,12 +2921,7 @@ function startBatchFiveStarBattle() {
 
 function getEffectiveWatchedDate(watchEntry) {
   if (!watchEntry) return null;
-  const direct = normalizeWatchedAt(watchEntry.watched_at);
-  if (direct) return direct;
-  if (watchEntry.status === "watched" || watchEntry.my_rating != null) {
-    return normalizeWatchedAt(watchEntry.updated_at);
-  }
-  return null;
+  return normalizeWatchedAt(watchEntry.watched_at);
 }
 
 function renderAnnualLogView() {
@@ -2776,7 +2943,6 @@ function renderAnnualLogView() {
       watch: entry,
       effectiveDate,
       logYear,
-      isFallbackDate: !entry.watched_at && Boolean(effectiveDate),
     });
   }
 
@@ -2795,10 +2961,7 @@ function renderAnnualLogView() {
     state.selectedLogYear !== "all" &&
     !yearCounts.has(state.selectedLogYear)
   ) {
-    state.selectedLogYear = sortedYears[0] || "all";
-  }
-  if (state.selectedLogYear === "all" && sortedYears.length > 0 && !state._logYearUserChosen) {
-    state.selectedLogYear = sortedYears[0];
+    state.selectedLogYear = "all";
   }
 
   const targetLogs = watchedLogs
@@ -2830,13 +2993,22 @@ function renderAnnualLogView() {
     .slice(0, 3);
 
   const yearTabsHtml = [
+    `<button type="button" class="log-year-tab ${state.selectedLogYear === "all" ? "active" : ""}" data-log-year="all">すべて <span>(${watchedLogs.length}本)</span></button>`,
     ...sortedYears.map((yr) => {
       const cnt = yearCounts.get(yr) || 0;
       const label = yr === "不明" ? "日付未設定" : `${yr}年`;
       const active = state.selectedLogYear === yr;
       return `<button type="button" class="log-year-tab ${active ? "active" : ""}" data-log-year="${escapeHtml(yr)}">${escapeHtml(label)} <span>(${cnt}本)</span></button>`;
     }),
-    `<button type="button" class="log-year-tab ${state.selectedLogYear === "all" ? "active" : ""}" data-log-year="all">すべて <span>(${watchedLogs.length}本)</span></button>`,
+  ].join("");
+
+  const yearSelectOptionsHtml = [
+    `<option value="all" ${state.selectedLogYear === "all" ? "selected" : ""}>すべて (${watchedLogs.length}本)</option>`,
+    ...sortedYears.map((yr) => {
+      const cnt = yearCounts.get(yr) || 0;
+      const label = yr === "不明" ? `日付未設定 (${cnt}本)` : `${yr}年 (${cnt}本)`;
+      return `<option value="${escapeHtml(yr)}" ${state.selectedLogYear === yr ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }),
   ].join("");
 
   const topGenresHtml =
@@ -2847,21 +3019,18 @@ function renderAnnualLogView() {
   const logsListHtml =
     targetLogs.length > 0
       ? targetLogs
-          .map(({ movie: m, watch: w, effectiveDate, isFallbackDate }) => {
-            const dateBadge = effectiveDate ? effectiveDate.replaceAll("-", "/") : "日付未設定";
+          .map(({ movie: m, watch: w, effectiveDate }) => {
+            const dateBadge = effectiveDate ? effectiveDate.replaceAll("-", "/") : "📅 日付未設定";
+            const isUnset = !effectiveDate;
             const tags = w.impression_tags || [];
             const memoPreview = w.memo ? String(w.memo).trim() : "";
             return `
               <article class="annual-log-row" data-ranking-detail="${escapeHtml(m.imdb_id)}">
                 <div class="log-date-col">
-                  <span class="log-date-badge ${isFallbackDate ? "is-fallback" : ""}" title="${isFallbackDate ? "視聴日未設定のため記録更新日を表示（タップで修正可）" : "視聴日"}">${escapeHtml(dateBadge)}</span>
+                  <span class="log-date-badge ${isUnset ? "is-unset" : ""}" title="${isUnset ? "視聴日未設定（タップして日付を設定できます）" : "視聴日"}">${escapeHtml(dateBadge)}</span>
                 </div>
                 <div class="log-thumb-wrap">
-                  ${
-                    m.poster_url
-                      ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
-                      : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
-                  }
+                  ${renderPosterImageOrFallback(m, { variant: "thumb" })}
                 </div>
                 <div class="log-row-main">
                   <div class="log-row-title-line">
@@ -2890,7 +3059,12 @@ function renderAnnualLogView() {
       `;
 
   container.innerHTML = `
-    <div class="log-year-tabs">${yearTabsHtml}</div>
+    <div class="log-filter-bar">
+      <div class="log-year-tabs">${yearTabsHtml}</div>
+      <div class="log-year-select-wrap">
+        <select id="log-year-select" aria-label="鑑賞年で絞り込み">${yearSelectOptionsHtml}</select>
+      </div>
+    </div>
     <div class="log-summary-grid">
       <div class="log-stat-card">
         <div class="log-stat-label">視聴本数</div>
@@ -2911,6 +3085,7 @@ function renderAnnualLogView() {
     </div>
     <div class="annual-log-list">${logsListHtml}</div>
   `;
+  attachPosterErrorHandlers(container);
 }
 
 function switchRankingTab(tabName) {
@@ -3001,11 +3176,7 @@ function renderRankingView() {
         <article class="ranking-row ${tierClass}" data-imdb-id="${escapeHtml(m.imdb_id)}">
           <div class="ranking-rank-badge ${tierClass}">${rankText}</div>
           <button type="button" class="ranking-thumb-btn" data-ranking-detail="${escapeHtml(m.imdb_id)}" aria-label="${escapeHtml(m.title_ja)}の詳細を開く">
-            ${
-              m.poster_url
-                ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" loading="lazy" />`
-                : `<div class="list-thumb-fallback">${escapeHtml(m.title_ja.slice(0, 2))}</div>`
-            }
+            ${renderPosterImageOrFallback(m, { variant: "thumb" })}
           </button>
           <div class="ranking-row-main" data-ranking-detail="${escapeHtml(m.imdb_id)}">
             <div class="ranking-row-title-line">
@@ -3030,6 +3201,7 @@ function renderRankingView() {
       `;
     })
     .join("");
+  attachPosterErrorHandlers(listEl);
 }
 
 async function handleRankingRowAction(action, imdbId) {
@@ -3197,9 +3369,10 @@ function openMovieModal(imdbId) {
   const countryDisplay = getMovieCountryString(m);
 
   const modal = document.getElementById("movie-modal");
-  const hasBackdrop = Boolean(m.backdrop_url);
+  const backdropUrl = m.backdrop_url ? String(m.backdrop_url).trim() : "";
+  const hasBackdrop = Boolean(backdropUrl);
   const backdropBanner = hasBackdrop
-    ? `<div class="modal-backdrop-banner" style="background-image:url('${escapeHtml(m.backdrop_url)}')"><button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">✕</button></div>`
+    ? `<div id="modal-backdrop-banner" class="modal-backdrop-banner"><img id="modal-backdrop-img" class="modal-backdrop-img" src="${escapeHtml(backdropUrl)}" alt="" /><button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">&times;</button></div>`
     : "";
 
   const selectedImpressionSet = new Set(w.impression_tags || []);
@@ -3237,11 +3410,7 @@ function openMovieModal(imdbId) {
               return `
                 <button type="button" class="similar-movie-card" data-open-similar="${escapeHtml(sim.imdb_id)}">
                   <div class="similar-poster-wrap">
-                    ${
-                      sim.poster_url
-                        ? `<img src="${escapeHtml(sim.poster_url)}" alt="${escapeHtml(sim.title_ja)}" loading="lazy" />`
-                        : `<div class="similar-poster-fallback"><strong>${escapeHtml(sim.title_ja)}</strong></div>`
-                    }
+                    ${renderPosterImageOrFallback(sim, { variant: "similar", imgClass: "similar-card-poster" })}
                     <span class="similar-match-badge">マッチ ${simMatch}%</span>
                   </div>
                   <div class="similar-card-body">
@@ -3258,24 +3427,21 @@ function openMovieModal(imdbId) {
     `
       : "";
 
-  document.getElementById("modal-body").innerHTML = `
+  const modalBody = document.getElementById("modal-body");
+  modalBody.innerHTML = `
     ${backdropBanner}
-    <div style="${hasBackdrop ? "padding:16px 20px 20px" : ""}">
+    <div id="modal-content-inner" class="modal-content-inner ${hasBackdrop ? "has-backdrop" : "is-compact-header"}">
       <div class="modal-header">
         <div>
           <h2>${escapeHtml(m.title_ja)} <span style="color:var(--text-secondary);font-size:0.9rem">(${m.release_year})</span></h2>
           <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${escapeHtml(m.director || "不明")}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}${countryDisplay ? ` ｜ ${escapeHtml(countryDisplay)}` : ""}</div>
         </div>
-        ${hasBackdrop ? "" : `<button type="button" class="icon-close" data-close-modal="movie-modal" aria-label="閉じる">✕</button>`}
+        <button id="modal-header-close-btn" type="button" class="icon-close ${hasBackdrop ? "hidden" : ""}" data-close-modal="movie-modal" aria-label="閉じる">&times;</button>
       </div>
 
       <div class="modal-grid">
         <div>
-          ${
-            m.poster_url
-              ? `<img class="modal-poster" src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" />`
-              : `<div class="poster-wrap" style="border-radius:10px"><div class="poster-fallback"><strong>${escapeHtml(m.title_ja)}</strong><span>${escapeHtml(m.title_en)}</span></div></div>`
-          }
+          ${renderPosterImageOrFallback(m, { variant: "modal", imgClass: "modal-poster" })}
         </div>
         <div>
           <div class="metrics-row">
@@ -3341,7 +3507,7 @@ function openMovieModal(imdbId) {
           <label for="modal-watched-at">📅 視聴日</label>
           <div class="modal-watched-at-inputs">
             <input id="modal-watched-at" type="date" value="${escapeHtml(w.watched_at || "")}" />
-            <button id="modal-watched-at-clear" type="button" class="btn btn-ghost btn-sm">クリア</button>
+            <button id="modal-clear-watched-at-btn" type="button" class="btn btn-ghost btn-sm">クリア</button>
           </div>
         </div>
 
@@ -3358,17 +3524,38 @@ function openMovieModal(imdbId) {
     </div>
   `;
 
-  const modalBody = document.getElementById("modal-body");
   modalBody.style.padding = hasBackdrop ? "0" : "20px";
+  attachPosterErrorHandlers(modalBody);
+
+  const backdropImg = document.getElementById("modal-backdrop-img");
+  const backdropBannerEl = document.getElementById("modal-backdrop-banner");
+  const modalInnerEl = document.getElementById("modal-content-inner");
+  const modalHeaderCloseBtn = document.getElementById("modal-header-close-btn");
+  const switchToCompactHeader = () => {
+    if (backdropBannerEl) backdropBannerEl.classList.add("hidden");
+    if (modalInnerEl) {
+      modalInnerEl.classList.remove("has-backdrop");
+      modalInnerEl.classList.add("is-compact-header");
+    }
+    if (modalHeaderCloseBtn) modalHeaderCloseBtn.classList.remove("hidden");
+    modalBody.style.padding = "20px";
+  };
+  if (backdropImg) {
+    backdropImg.addEventListener("error", switchToCompactHeader, { once: true });
+    if (backdropImg.complete && backdropImg.naturalWidth === 0) {
+      switchToCompactHeader();
+    }
+  }
 
   let selectedStatus = w.status || "unwatched";
   const watchedAtInput = document.getElementById("modal-watched-at");
+  let watchedAtExplicitlyCleared = false;
 
   modal.querySelectorAll("[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectedStatus = btn.dataset.status;
       modal.querySelectorAll("[data-status]").forEach((b) => b.classList.toggle("active", b === btn));
-      if (selectedStatus === "watched" && watchedAtInput && !watchedAtInput.value) {
+      if (selectedStatus === "watched" && watchedAtInput && !watchedAtInput.value && !watchedAtExplicitlyCleared && !state.unknownWatchedDate) {
         watchedAtInput.value = getTodayDateString();
       }
     });
@@ -3380,14 +3567,21 @@ function openMovieModal(imdbId) {
       if (ratingSelect.value && selectedStatus !== "watched") {
         selectedStatus = "watched";
         modal.querySelectorAll("[data-status]").forEach((b) => b.classList.toggle("active", b.dataset.status === "watched"));
-        if (watchedAtInput && !watchedAtInput.value) {
+        if (watchedAtInput && !watchedAtInput.value && !watchedAtExplicitlyCleared && !state.unknownWatchedDate) {
           watchedAtInput.value = getTodayDateString();
         }
       }
     });
   }
 
-  document.getElementById("modal-watched-at-clear")?.addEventListener("click", () => {
+  watchedAtInput?.addEventListener("input", () => {
+    if (watchedAtInput.value) {
+      watchedAtExplicitlyCleared = false;
+    }
+  });
+
+  document.getElementById("modal-clear-watched-at-btn")?.addEventListener("click", () => {
+    watchedAtExplicitlyCleared = true;
     if (watchedAtInput) watchedAtInput.value = "";
   });
 
@@ -3420,7 +3614,10 @@ function openMovieModal(imdbId) {
 
       const ratingVal = document.getElementById("modal-rating").value;
       const ensuredStatus = "watched";
-      const watchedAtVal = normalizeWatchedAt(watchedAtInput?.value) || w.watched_at || getTodayDateString();
+      const inputDate = normalizeWatchedAt(watchedAtInput?.value);
+      const watchedAtVal = watchedAtExplicitlyCleared
+        ? null
+        : inputDate || (state.unknownWatchedDate ? w.watched_at || null : w.watched_at || getTodayDateString());
       const payload = {
         imdb_id: imdbId,
         status: ensuredStatus,
@@ -3444,8 +3641,7 @@ function openMovieModal(imdbId) {
       const ratingVal = document.getElementById("modal-rating").value;
       const latestEntry = normalizeWatchEntry(state.watchMap[imdbId]);
       const inputDate = normalizeWatchedAt(watchedAtInput?.value);
-      const resolvedWatchedAt =
-        selectedStatus === "watched" ? inputDate || latestEntry.watched_at || getTodayDateString() : inputDate;
+      const resolvedWatchedAt = inputDate || null;
       const payload = {
         imdb_id: imdbId,
         status: selectedStatus,
@@ -3457,6 +3653,7 @@ function openMovieModal(imdbId) {
         updated_at: new Date().toISOString(),
       };
 
+      saveWatchedAtCacheEntry(imdbId, resolvedWatchedAt, { explicitClear: resolvedWatchedAt == null });
       const { error, mode } = await upsertWatchStatus(payload);
       if (error) {
         showToast(`クラウド保存エラー（ブラウザに一時保存済み）: ${error.message || "RLS権限/通信エラー"}`, {
@@ -3509,11 +3706,7 @@ function drawGachaPicks() {
       return `
         <article class="gacha-card">
           <div class="gacha-poster-col">
-            ${
-              m.poster_url
-                ? `<img src="${escapeHtml(m.poster_url)}" alt="${escapeHtml(m.title_ja)}" class="gacha-poster" />`
-                : `<div class="poster-wrap gacha-poster-fallback"><div class="poster-fallback"><strong>${escapeHtml(m.title_ja)}</strong><span>${escapeHtml(m.title_en)}</span></div></div>`
-            }
+            ${renderPosterImageOrFallback(m, { variant: "gacha", imgClass: "gacha-poster" })}
           </div>
           <div class="gacha-info-col">
             <div class="gacha-card-top">
@@ -3544,6 +3737,7 @@ function drawGachaPicks() {
       `;
     })
     .join("");
+  attachPosterErrorHandlers(container);
 }
 
 function openGachaModal() {
@@ -3763,7 +3957,20 @@ function bindEvents() {
         openMovieModal(detailTarget.dataset.rankingDetail);
       }
     });
+
+    rankingView.addEventListener("change", (e) => {
+      const select = e.target.closest("#log-year-select");
+      if (select) {
+        state.selectedLogYear = select.value;
+        state._logYearUserChosen = true;
+        renderAnnualLogView();
+      }
+    });
   }
+
+  document.getElementById("toggle-unknown-watched-date")?.addEventListener("change", (e) => {
+    setUnknownWatchedDatePref(Boolean(e.target.checked), { persist: true });
+  });
 
   const battleModalBody = document.getElementById("battle-modal-body");
   if (battleModalBody) {
