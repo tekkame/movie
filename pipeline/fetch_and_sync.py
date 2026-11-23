@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+from datetime import datetime, timedelta, timezone
 import gzip
 import io
 import json
@@ -26,7 +27,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -658,6 +659,151 @@ def refresh_all_jp_providers(sb: SupabaseClient, tmdb_api_key: str) -> None:
     print(f"  -> 配信状況の更新完了: {len(updates):,}件", flush=True)
 
 
+def _parse_iso_datetime_utc(value: Any) -> Optional[datetime]:
+    """ISO8601文字列をUTCのaware datetimeへパースする。失敗時は None を返す。"""
+    if not value or not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed
+
+
+def is_omdb_cache_fresh(
+    cache_entry: Optional[Dict[str, Any]],
+    release_year: int,
+    current_year: int,
+    recent_ttl_days: int = 14,
+    now_dt: Optional[datetime] = None,
+) -> bool:
+    """
+    OMDb キャッシュが有効（再取得不要）かどうかを判定する。
+      - cache_entry が None（未キャッシュ） -> False
+      - 直近2年（release_year >= current_year - 1） -> fetched_at から recent_ttl_days 日未満なら True、以上・欠損・不正なら False
+      - 3年以上前（release_year < current_year - 1） -> 既存キャッシュが存在すれば True（API枠節約）
+    """
+    if cache_entry is None:
+        return False
+
+    if release_year < current_year - 1:
+        return True
+
+    fetched_dt = _parse_iso_datetime_utc(cache_entry.get("fetched_at"))
+    if fetched_dt is None:
+        return False
+
+    ref_now = now_dt if now_dt is not None else datetime.now(timezone.utc)
+    if ref_now.tzinfo is None:
+        ref_now = ref_now.replace(tzinfo=timezone.utc)
+    else:
+        ref_now = ref_now.astimezone(timezone.utc)
+
+    age = ref_now - fetched_dt
+    return age < timedelta(days=recent_ttl_days)
+
+
+def plan_omdb_fetch_and_sync_years(
+    candidates_by_year: dict[int, list[dict[str, Any]]],
+    omdb_cache: dict[str, dict[str, Any]],
+    existing_movie_counts_by_year: dict[int, int],
+    current_year: int,
+    mode: str = "weekly",
+    recent_ttl_days: int = 14,
+    now_dt: Optional[datetime] = None,
+    min_movies_per_year: int = 20,
+) -> dict[str, Any]:
+    """
+    OMDb取得の優先順リストと、年ごとの「再計算・movies同期」必要性判定材料を組み立てる純粋関数。
+
+    優先1（直近2年: current_year, current_year - 1）:
+      - 未キャッシュ または TTL期限切れ（not is_omdb_cache_fresh）の候補を優先取得対象に並べる。
+      - 直近2年は常にランキング再計算・movies同期の対象候補とする。
+    優先2（それ以前の過去年: current_year - 2 〜 1980 へ降順）:
+      - 未キャッシュ（not is_omdb_cache_fresh）の候補を新しい年順に並べる。
+      - 既存の movies 収録数が min_movies_per_year 未満の年、または新規にOMDb取得が発生した年のみ
+        movies 同期（TMDB再取得含む）対象とみなす。
+    """
+    years_desc = sorted(candidates_by_year.keys(), reverse=True)
+    recent_years = [y for y in years_desc if y >= current_year - 1]
+    backfill_years = [y for y in years_desc if y < current_year - 1]
+
+    priority1_queue: list[tuple[int, dict[str, Any]]] = []
+    for y in recent_years:
+        for cand in candidates_by_year.get(y, []):
+            iid = cand["imdb_id"]
+            if not is_omdb_cache_fresh(
+                omdb_cache.get(iid),
+                release_year=y,
+                current_year=current_year,
+                recent_ttl_days=recent_ttl_days,
+                now_dt=now_dt,
+            ):
+                priority1_queue.append((y, cand))
+
+    priority2_queue: list[tuple[int, dict[str, Any]]] = []
+    if mode in ("weekly", "backfill"):
+        for y in backfill_years:
+            for cand in candidates_by_year.get(y, []):
+                iid = cand["imdb_id"]
+                if not is_omdb_cache_fresh(
+                    omdb_cache.get(iid),
+                    release_year=y,
+                    current_year=current_year,
+                    recent_ttl_days=recent_ttl_days,
+                    now_dt=now_dt,
+                ):
+                    priority2_queue.append((y, cand))
+
+    ordered_years_for_sync = recent_years + backfill_years
+    return {
+        "recent_years": recent_years,
+        "backfill_years": backfill_years,
+        "priority1_queue": priority1_queue,
+        "priority2_queue": priority2_queue,
+        "fetch_queue": priority1_queue + priority2_queue,
+        "ordered_years_for_sync": ordered_years_for_sync,
+        "existing_movie_counts_by_year": dict(existing_movie_counts_by_year),
+        "min_movies_per_year": min_movies_per_year,
+    }
+
+
+def should_sync_year_movies(
+    year: int,
+    current_year: int,
+    mode: str,
+    newly_fetched_years: set[int],
+    existing_movie_counts_by_year: dict[int, int],
+    min_movies_per_year: int = 20,
+) -> bool:
+    """
+    その年の TOP20 再計算 & TMDB取得 & movies UPSERT を実行すべきかを判定する。
+      - 直近2年（year >= current_year - 1）は常に同期対象（IMDbスコア・投票数変動も反映）。
+      - 3年以上前の過去年は:
+          * backfill 明示実行時は従来通りすべて同期対象（ただしキャッシュ閾値チェックは呼び出し側で実施）。
+          * weekly 実行時は「今回新規OMDb取得があった年」または「moviesの収録数が20本未満の年」のみ同期し、
+            既に20本揃っていて変更がない過去年の無駄なTMDB再取得をスキップして高速化する。
+    """
+    if year >= current_year - 1:
+        return True
+    if mode == "backfill":
+        return True
+    if year in newly_fetched_years:
+        return True
+    if existing_movie_counts_by_year.get(year, 0) < min_movies_per_year:
+        return True
+    return False
+
+
 def main() -> None:
     load_dotenv()
     current_year = dt.date.today().year
@@ -666,7 +812,8 @@ def main() -> None:
     parser.add_argument("--mode", choices=["weekly", "backfill"], default="weekly")
     parser.add_argument("--start-year", type=int, default=None)
     parser.add_argument("--end-year", type=int, default=current_year)
-    parser.add_argument("--max-omdb-calls", type=int, default=900, help="1回の実行で叩くOMDb上限")
+    parser.add_argument("--max-omdb-calls", type=int, default=800, help="1回の実行で叩くOMDb上限（無料枠1日1,000件に対する安全枠）")
+    parser.add_argument("--recent-ttl-days", type=int, default=14, help="直近2年（今年・前年）のOMDbキャッシュ有効日数")
     anim_group = parser.add_mutually_exclusive_group()
     anim_group.add_argument(
         "--include-animation",
@@ -684,9 +831,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    start_year = args.start_year
-    if start_year is None:
-        start_year = 1980 if args.mode == "backfill" else current_year - 1
+    # weekly モードでも余剰OMDb枠で 1980年〜現在 まで自動バックフィルできるようデフォルトは 1980
+    start_year = args.start_year if args.start_year is not None else 1980
 
     omdb_key = os.getenv("OMDB_API_KEY", "")
     tmdb_key = os.getenv("TMDB_API_KEY", "")
@@ -700,7 +846,7 @@ def main() -> None:
 
     sb = None if args.dry_run else SupabaseClient(sb_url, sb_key)
 
-    # 1. IMDb一次候補抽出
+    # 1. IMDb一次候補抽出（weekly でも 1980年〜現在 をストリーム抽出し余剰枠バックフィルに備える）
     candidates_by_year = download_imdb_candidates(
         start_year=start_year,
         end_year=args.end_year,
@@ -708,19 +854,28 @@ def main() -> None:
         include_animation=args.include_animation,
     )
 
-    # 2. OMDbキャッシュ読み込み & 既知シード補完 & 未取得分のみ取得
-    print("[2/4] OMDb キャッシュ照合・未取得分の批評家スコア／受賞歴を取得中...", flush=True)
+    # 2. OMDbキャッシュ & 既存movies状況読み込み
+    print("[2/4] OMDb キャッシュ照合・新作TTL更新＆余剰枠での過去年自動バックフィルを実行中...", flush=True)
     omdb_cache: dict[str, dict[str, Any]] = {}
+    existing_movie_rows: list[dict[str, Any]] = []
+    existing_movie_counts_by_year: dict[int, int] = defaultdict(int)
     if sb is not None:
         for row in sb.select_all("omdb_cache"):
             omdb_cache[row["imdb_id"]] = row
+        existing_movie_rows = sb.select_all("movies", select="imdb_id,release_year,ai_summary,mood_tags")
+        for row in existing_movie_rows:
+            yr = row.get("release_year")
+            if isinstance(yr, int):
+                existing_movie_counts_by_year[yr] += 1
 
     omdb_calls = 0
     new_cache_rows: list[dict[str, Any]] = []
+    newly_fetched_years: set[int] = set()
     quota_reached = False
+    now_utc = datetime.now(timezone.utc)
 
-    # 既知シードデータをキャッシュに補完（OMDb API上限到達時でも『罪人たち』等の重要作を即時反映するため）
-    seed_now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    # 既知シードデータをキャッシュに補完（OMDb API上限到達時でも重要作を即時反映するため）
+    seed_now_iso = now_utc.isoformat()
     for seed_id, seed_info in KNOWN_OMDB_SEED_DATA.items():
         if seed_id not in omdb_cache:
             seed_row = {
@@ -736,47 +891,75 @@ def main() -> None:
             omdb_cache[seed_id] = seed_row
             new_cache_rows.append(seed_row)
 
-    # 新しい年から順に処理することで、初回バックフィル中でも直近年代からすぐサイトに並ぶ
-    for year in sorted(candidates_by_year.keys(), reverse=True):
+    plan = plan_omdb_fetch_and_sync_years(
+        candidates_by_year=candidates_by_year,
+        omdb_cache=omdb_cache,
+        existing_movie_counts_by_year=dict(existing_movie_counts_by_year),
+        current_year=current_year,
+        mode=args.mode,
+        recent_ttl_days=args.recent_ttl_days,
+        now_dt=now_utc,
+        min_movies_per_year=20,
+    )
+    print(
+        f"  -> 取得計画: 優先1(直近2年・TTL切れ/未取得)={len(plan['priority1_queue'])}件, "
+        f"優先2(過去年自動バックフィル候補)={len(plan['priority2_queue'])}件, "
+        f"OMDb上限={args.max_omdb_calls}件",
+        flush=True,
+    )
+
+    for year, cand in plan["fetch_queue"]:
         if quota_reached:
             break
-        for cand in candidates_by_year[year]:
-            iid = cand["imdb_id"]
-            if iid in omdb_cache:
-                continue
-            if omdb_calls >= args.max_omdb_calls:
-                print(
-                    f"  -> 本日のOMDb上限 ({args.max_omdb_calls}件) に到達。途中キャッシュを保存して終了します。",
-                    flush=True,
-                )
+        iid = cand["imdb_id"]
+        if omdb_calls >= args.max_omdb_calls:
+            print(
+                f"  -> 本日のOMDb上限 ({args.max_omdb_calls}件) に到達。途中キャッシュを保存して次の工程へ進みます。",
+                flush=True,
+            )
+            quota_reached = True
+            break
+        try:
+            detail = fetch_omdb_detail(iid, omdb_key)
+            omdb_calls += 1
+            if detail:
+                detail["fetched_at"] = datetime.now(timezone.utc).isoformat()
+                omdb_cache[iid] = detail
+                new_cache_rows.append(detail)
+                newly_fetched_years.add(year)
+            time.sleep(0.05)
+        except Exception as exc:
+            print(f"  [WARN] OMDb取得エラー ({iid}): {exc}", file=sys.stderr)
+            if "無料枠" in str(exc) or "レート制限" in str(exc):
                 quota_reached = True
                 break
-            try:
-                detail = fetch_omdb_detail(iid, omdb_key)
-                omdb_calls += 1
-                if detail:
-                    omdb_cache[iid] = detail
-                    new_cache_rows.append(detail)
-                time.sleep(0.05)
-            except Exception as exc:
-                print(f"  [WARN] OMDb取得エラー ({iid}): {exc}", file=sys.stderr)
-                if "無料枠" in str(exc) or "レート制限" in str(exc):
-                    quota_reached = True
-                    break
 
     if sb is not None and new_cache_rows:
         sb.upsert("omdb_cache", new_cache_rows)
-        print(f"  -> OMDb新規キャッシュ保存: {len(new_cache_rows)}件", flush=True)
+        print(
+            f"  -> OMDb新規・再取得キャッシュ保存: {len(new_cache_rows)}件 (API呼出={omdb_calls}件)",
+            flush=True,
+        )
 
     # 3. 年ごとのスコアリング & ハイブリッド20本選出 + TMDB日本語・配信取得
     print("[3/4] 年別ハイブリッド20本選出 & TMDB日本語・配信情報を取得中...", flush=True)
     all_selected_records: list[dict[str, Any]] = []
     processed_years: dict[int, set[str]] = {}
-    now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    for year in sorted(candidates_by_year.keys(), reverse=True):
+    for year in plan["ordered_years_for_sync"]:
         year_cands = candidates_by_year[year]
-        # OMDbキャッシュが一定数以上揃っていれば選出を実行（マルチバケット新規候補追加時も30本以上または60%以上で即時同期）
+        if not should_sync_year_movies(
+            year=year,
+            current_year=current_year,
+            mode=args.mode,
+            newly_fetched_years=newly_fetched_years,
+            existing_movie_counts_by_year=dict(existing_movie_counts_by_year),
+            min_movies_per_year=20,
+        ):
+            continue
+
+        # OMDbキャッシュが一定数以上揃っていれば選出を実行（30本以上または60%以上で即時同期）
         cached_count = sum(1 for c in year_cands if c["imdb_id"] in omdb_cache)
         min_required_cached = min(30, math.ceil(len(year_cands) * 0.6)) if year_cands else 0
         if year_cands and cached_count < min_required_cached:
@@ -842,7 +1025,6 @@ def main() -> None:
         return
 
     assert sb is not None
-    existing_movie_rows = sb.select_all("movies", select="imdb_id,release_year,ai_summary,mood_tags")
     watch_status_rows = sb.select_all("user_watch_status", select="imdb_id")
     protected_watch_ids = {row["imdb_id"] for row in watch_status_rows if row.get("imdb_id")}
 
@@ -855,7 +1037,8 @@ def main() -> None:
             stale_ids.append(iid)
 
     upsert_rows = preserve_ai_enrichment(all_selected_records, existing_movie_rows)
-    sb.upsert("movies", upsert_rows)
+    if upsert_rows:
+        sb.upsert("movies", upsert_rows)
     print(f"  -> Supabase movies 同期完了: {len(upsert_rows)}本", flush=True)
 
     if stale_ids:

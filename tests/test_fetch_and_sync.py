@@ -4,6 +4,7 @@ fetch_and_sync.py の主要ロジックに対する単体テスト
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import gzip
 import io
 import unittest
@@ -243,6 +244,100 @@ class TestFetchAndSync(unittest.TestCase):
         self.assertEqual(set(merged[0].keys()), set(merged[1].keys()))
         self.assertIn("ai_summary", merged[0])
         self.assertIn("mood_tags", merged[0])
+
+    def test_is_omdb_cache_fresh_ttl_rules(self) -> None:
+        now = datetime(2026, 11, 23, 0, 0, 0, tzinfo=timezone.utc)
+        current_year = 2026
+
+        # 未キャッシュは常に False
+        self.assertFalse(fetch_and_sync.is_omdb_cache_fresh(None, 2026, current_year, now_dt=now))
+        self.assertFalse(fetch_and_sync.is_omdb_cache_fresh(None, 2010, current_year, now_dt=now))
+
+        # 直近2年（2026, 2025）: 14日未満なら True、14日以上なら False
+        fresh_ts = (now - timedelta(days=13, hours=23)).isoformat()
+        stale_ts = (now - timedelta(days=14)).isoformat()
+        very_old_ts = (now - timedelta(days=90)).isoformat()
+
+        self.assertTrue(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": fresh_ts}, 2026, current_year, now_dt=now)
+        )
+        self.assertTrue(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": fresh_ts}, 2025, current_year, now_dt=now)
+        )
+        self.assertFalse(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": stale_ts}, 2026, current_year, now_dt=now)
+        )
+        self.assertFalse(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": stale_ts}, 2025, current_year, now_dt=now)
+        )
+        # fetched_at 欠損・不正値も直近2年なら再取得対象
+        self.assertFalse(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": None}, 2026, current_year, now_dt=now)
+        )
+        self.assertFalse(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": "invalid-date"}, 2025, current_year, now_dt=now)
+        )
+
+        # 3年以上前（2024以前）は 90日経過していても既存キャッシュがあれば True（API枠節約）
+        self.assertTrue(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": very_old_ts}, 2024, current_year, now_dt=now)
+        )
+        self.assertTrue(
+            fetch_and_sync.is_omdb_cache_fresh({"fetched_at": None}, 1995, current_year, now_dt=now)
+        )
+
+    def test_plan_omdb_fetch_and_sync_years_prioritizes_recent_then_backfill(self) -> None:
+        now = datetime(2026, 11, 23, 0, 0, 0, tzinfo=timezone.utc)
+        current_year = 2026
+        candidates_by_year = {
+            2026: [{"imdb_id": "tt_2026_fresh"}, {"imdb_id": "tt_2026_stale"}, {"imdb_id": "tt_2026_new"}],
+            2025: [{"imdb_id": "tt_2025_stale"}],
+            2024: [{"imdb_id": "tt_2024_cached"}, {"imdb_id": "tt_2024_uncached"}],
+            1999: [{"imdb_id": "tt_1999_uncached"}],
+        }
+        omdb_cache = {
+            "tt_2026_fresh": {"fetched_at": (now - timedelta(days=5)).isoformat()},
+            "tt_2026_stale": {"fetched_at": (now - timedelta(days=15)).isoformat()},
+            "tt_2025_stale": {"fetched_at": (now - timedelta(days=20)).isoformat()},
+            "tt_2024_cached": {"fetched_at": (now - timedelta(days=60)).isoformat()},
+        }
+        existing_counts = {2026: 20, 2025: 20, 2024: 20, 1999: 0}
+
+        plan = fetch_and_sync.plan_omdb_fetch_and_sync_years(
+            candidates_by_year=candidates_by_year,
+            omdb_cache=omdb_cache,
+            existing_movie_counts_by_year=existing_counts,
+            current_year=current_year,
+            mode="weekly",
+            recent_ttl_days=14,
+            now_dt=now,
+        )
+
+        # 優先1: 直近2年の stale / new のみ（fresh は除外）
+        self.assertEqual(
+            [(y, c["imdb_id"]) for y, c in plan["priority1_queue"]],
+            [(2026, "tt_2026_stale"), (2026, "tt_2026_new"), (2025, "tt_2025_stale")],
+        )
+        # 優先2: 過去年（2024 -> 1999 降順）の未キャッシュのみ（2024_cached は60日経過でも再利用）
+        self.assertEqual(
+            [(y, c["imdb_id"]) for y, c in plan["priority2_queue"]],
+            [(2024, "tt_2024_uncached"), (1999, "tt_1999_uncached")],
+        )
+        # max_omdb_calls=4 で頭から切っても、優先1の3件をすべて処理したあと余剰1枠で2024年を自動バックフィルできる
+        limited = plan["fetch_queue"][:4]
+        self.assertEqual(
+            [c["imdb_id"] for _, c in limited],
+            ["tt_2026_stale", "tt_2026_new", "tt_2025_stale", "tt_2024_uncached"],
+        )
+
+        # weekly 時の年同期判定:
+        # - 直近2年（2026, 2025）は常に同期
+        # - 過去年（2024）は newly_fetched_years に含まれなければ（movies=20本済み）スキップ、含まれれば同期
+        # - 過去年（1999）は既存 movies=0 (<20) なので新規OMDbが無くても既存キャッシュ分だけで同期対象
+        self.assertTrue(fetch_and_sync.should_sync_year_movies(2026, current_year, "weekly", set(), existing_counts))
+        self.assertFalse(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", set(), existing_counts))
+        self.assertTrue(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", {2024}, existing_counts))
+        self.assertTrue(fetch_and_sync.should_sync_year_movies(1999, current_year, "weekly", set(), existing_counts))
 
 
 if __name__ == "__main__":

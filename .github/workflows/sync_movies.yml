@@ -2,14 +2,14 @@ name: Sync Core Cinema Archive
 
 on:
   schedule:
-    # 毎週日曜 03:00 JST (= 土曜 18:00 UTC) に実行
-    # ・直近2年のランキング更新＋全収録作品の日本配信状況を最新化
-    # ・Supabase無料枠の7日間非アクティブ停止も自動で防止
-    - cron: "0 18 * * 6"
+    # 毎週日曜・水曜 03:00 JST (= 土曜・火曜 18:00 UTC) の週2回実行
+    # ・直近2年のランキング更新（14日TTL再取得）＋余剰OMDb枠での1980年〜過去年自動バックフィル
+    # ・全収録作品の日本配信状況を最新化 ＋ Supabase無料枠の7日間非アクティブ停止を防止
+    - cron: "0 18 * * 2,6"
   workflow_dispatch:
     inputs:
       mode:
-        description: "実行モード（weekly: 週次更新 / backfill: 1980年〜全件初回構築）"
+        description: "実行モード（weekly: 週次更新＋余剰枠バックフィル / backfill: 1980年〜全件初回構築）"
         required: true
         default: "weekly"
         type: choice
@@ -17,9 +17,9 @@ on:
           - weekly
           - backfill
       max_omdb_calls:
-        description: "OMDb API の最大コール数（無料枠は1日1,000件）"
+        description: "OMDb API の最大コール数（無料枠1日1,000件に対する安全上限）"
         required: false
-        default: "900"
+        default: "800"
         type: string
       include_animation:
         description: "アニメ映画を選出対象に含める（デフォルト: true）"
@@ -50,7 +50,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           MODE="${{ github.event.inputs.mode || 'weekly' }}"
-          MAX_CALLS="${{ github.event.inputs.max_omdb_calls || '900' }}"
+          MAX_CALLS="${{ github.event.inputs.max_omdb_calls || '800' }}"
           ANIM_FLAG="--include-animation"
           if [ "${{ github.event.inputs.include_animation }}" = "false" ]; then
             ANIM_FLAG="--exclude-animation"

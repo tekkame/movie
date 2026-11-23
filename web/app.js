@@ -1670,6 +1670,41 @@ function setActiveMainView(viewName) {
   }
 }
 
+function updateLastUpdatedLabel() {
+  const el = document.getElementById("last-updated-label");
+  if (!el) return;
+
+  let maxTs = -Infinity;
+  for (const m of state.movies) {
+    if (!m || !m.updated_at) continue;
+    const ts = Date.parse(m.updated_at);
+    if (!Number.isNaN(ts) && ts > maxTs) {
+      maxTs = ts;
+    }
+  }
+
+  if (!Number.isFinite(maxTs)) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    return;
+  }
+
+  const d = new Date(maxTs);
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value || String(d.getFullYear());
+  const mo = parts.find((p) => p.type === "month")?.value || String(d.getMonth() + 1).padStart(2, "0");
+  const day = parts.find((p) => p.type === "day")?.value || String(d.getDate()).padStart(2, "0");
+
+  el.textContent = `最終更新: ${y}/${mo}/${day}`;
+  el.title = `最新同期日時: ${d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`;
+  el.classList.remove("hidden");
+}
+
 function updateWatchStatsSummary() {
   const el = document.getElementById("watch-stats-pill");
   if (!el) return;
@@ -1737,6 +1772,7 @@ function renderMovies() {
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
   updateWatchStatsSummary();
+  updateLastUpdatedLabel();
   updateRankingNavBadges();
   updateActiveFiltersBadge();
   renderYearTabsBar();
