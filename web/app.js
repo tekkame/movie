@@ -289,6 +289,17 @@ const TASTE_PANEL_OPEN_KEY = "core_cinema_taste_panel_open_v3";
 const FILTER_PREFS_STORAGE_KEY = "core_cinema_filter_prefs_v3";
 const VIEW_MODE_STORAGE_KEY = "core_cinema_view_mode_v3";
 const UNKNOWN_WATCHED_DATE_KEY = "core_cinema_unknown_watched_date_v1";
+const MY_SUBSCRIPTIONS_STORAGE_KEY = "core_cinema_my_subscriptions_v1";
+
+const SUBSCRIPTION_PROVIDERS = [
+  { value: "U-NEXT", label: "U-NEXT" },
+  { value: "Amazon Prime Video", label: "Amazon Prime Video" },
+  { value: "Netflix", label: "Netflix" },
+  { value: "Disney Plus", label: "Disney+" },
+  { value: "Hulu", label: "Hulu" },
+  { value: "Apple TV", label: "Apple TV+" },
+  { value: "FOD", label: "FOD" },
+];
 
 const state = {
   supabase: null,
@@ -302,6 +313,9 @@ const state = {
   tasteProfile: { ...DEFAULT_TASTE_PROFILE },
   activePreset: null,
   presetGenres: null, // 例: ["Horror", "Thriller"] (プリセット用ORマッチ)
+  mySubscriptions: [], // 契約中の配信サービス配列
+  activeDirector: "", // 監督ディグ中の監督名
+  activeMoodTag: "", // 選択中のムードタグ
   newlyFlatrateFilterActive: false,
   newlyFlatrateBannerDismissed: false,
   isSyncingLocalToCloud: false,
@@ -1302,6 +1316,73 @@ function setMobileFiltersOpen(open) {
   }
 }
 
+function loadMySubscriptions() {
+  try {
+    const raw = localStorage.getItem(MY_SUBSCRIPTIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const allowed = new Set(SUBSCRIPTION_PROVIDERS.map((p) => p.value));
+    return [...new Set(parsed.map((v) => String(v || "").trim()).filter((v) => allowed.has(v)))];
+  } catch {
+    return [];
+  }
+}
+
+function saveMySubscriptions(list) {
+  const allowed = new Set(SUBSCRIPTION_PROVIDERS.map((p) => p.value));
+  const clean = [...new Set((list || []).map((v) => String(v || "").trim()).filter((v) => allowed.has(v)))];
+  state.mySubscriptions = clean;
+  try {
+    localStorage.setItem(MY_SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(clean));
+  } catch {
+    // ignore
+  }
+  updateMySubscriptionsUI();
+  return clean;
+}
+
+function updateMySubscriptionsUI() {
+  const count = state.mySubscriptions.length;
+  const btn = document.getElementById("my-subs-btn");
+  if (btn) {
+    btn.textContent = count > 0 ? `📺 マイサブスク (${count})` : "📺 マイサブスク";
+    btn.classList.toggle("has-subs", count > 0);
+    btn.setAttribute("aria-pressed", String(count > 0));
+  }
+  const opt = document.querySelector('#filter-provider option[value="__my_subs__"]');
+  if (opt) {
+    opt.textContent =
+      count > 0 ? `📺 マイサブスク（登録済み${count}件）` : "📺 マイサブスク（登録済みすべて）";
+  }
+}
+
+function openSubscriptionsModal() {
+  const listEl = document.getElementById("subs-checkbox-list");
+  if (!listEl) return;
+  const selectedSet = new Set(state.mySubscriptions);
+  listEl.innerHTML = SUBSCRIPTION_PROVIDERS.map((prov) => {
+    const checked = selectedSet.has(prov.value);
+    return `
+      <label class="subs-option-item ${checked ? "is-checked" : ""}">
+        <input type="checkbox" value="${escapeHtml(prov.value)}" ${checked ? "checked" : ""} />
+        <span class="subs-option-name">${escapeHtml(prov.label)}</span>
+      </label>
+    `;
+  }).join("");
+
+  listEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      cb.closest(".subs-option-item")?.classList.toggle("is-checked", cb.checked);
+    });
+  });
+
+  const modal = document.getElementById("subscriptions-modal");
+  if (modal && !modal.open) {
+    modal.showModal();
+  }
+}
+
 function updateActiveFiltersBadge() {
   const badge = document.getElementById("active-filters-badge");
   if (!badge) return;
@@ -1319,6 +1400,8 @@ function updateActiveFiltersBadge() {
   if (document.getElementById("filter-sort")?.value !== "year_desc") count += 1;
   if (Array.isArray(state.presetGenres) && state.presetGenres.length > 0) count += 1;
   if (state.newlyFlatrateFilterActive) count += 1;
+  if (state.activeDirector) count += 1;
+  if (state.activeMoodTag) count += 1;
 
   badge.textContent = String(count);
   badge.classList.toggle("hidden", count === 0);
@@ -1429,14 +1512,14 @@ function renderTasteAnalyticsDashboard() {
       ? topDirectors
           .map(
             (d) =>
-              `<button type="button" class="tg-chip tg-chip-dir" data-filter-query="${escapeHtml(d.name)}" title="${escapeHtml(d.name)}の作品を検索">🎬 ${escapeHtml(d.name)} ★${d.avg.toFixed(1)}</button>`
+              `<button type="button" class="tg-chip tg-chip-dir" data-director-dig="${escapeHtml(d.name)}" title="${escapeHtml(d.name)}の作品をディグる">🎬 ${escapeHtml(d.name)} ★${d.avg.toFixed(1)}</button>`
           )
           .join("")
       : (state.tasteProfile?.favorite_directors || [])
           .slice(0, 5)
           .map(
             (d) =>
-              `<button type="button" class="tg-chip tg-chip-dir" data-filter-query="${escapeHtml(d)}" title="${escapeHtml(d)}の作品を検索">🎬 ${escapeHtml(d)}</button>`
+              `<button type="button" class="tg-chip tg-chip-dir" data-director-dig="${escapeHtml(d)}" title="${escapeHtml(d)}の作品をディグる">🎬 ${escapeHtml(d)}</button>`
           )
           .join("");
 
@@ -1605,6 +1688,8 @@ async function initApp() {
 
   populateYearFilter();
   populateGenreFilter();
+  state.mySubscriptions = loadMySubscriptions();
+  updateMySubscriptionsUI();
   restoreFilterPrefs();
   updateAuthUI();
   setTastePanelOpen(false);
@@ -1921,6 +2006,8 @@ function resetAllFilterControls({ keepPreset = false, preserveSavedPrefs = false
   document.getElementById("filter-query").value = "";
   document.getElementById("filter-sort").value = "year_desc";
   state.newlyFlatrateFilterActive = false;
+  state.activeDirector = "";
+  state.activeMoodTag = "";
   if (!keepPreset) {
     state.activePreset = null;
     state.presetGenres = null;
@@ -1955,10 +2042,14 @@ function applyPreset(presetName) {
 
   if (presetName === "tonight_for_me") {
     document.getElementById("filter-flatrate-only").checked = true;
+    document.getElementById("filter-provider").value =
+      state.mySubscriptions.length > 0 ? "__my_subs__" : "all";
     document.getElementById("filter-watch").value = "unwatched";
     document.getElementById("filter-sort").value = "match_desc";
   } else if (presetName === "weekday_short") {
     document.getElementById("filter-flatrate-only").checked = true;
+    document.getElementById("filter-provider").value =
+      state.mySubscriptions.length > 0 ? "__my_subs__" : "all";
     document.getElementById("filter-watch").value = "unwatched";
     document.getElementById("filter-runtime").value = "115";
     document.getElementById("filter-sort").value = "match_desc";
@@ -1972,6 +2063,104 @@ function applyPreset(presetName) {
 
   updatePresetUI();
   renderMovies();
+}
+
+function movieMatchesDirector(movie, directorName) {
+  const target = String(directorName || "").trim().toLowerCase();
+  if (!target || !movie?.director) return false;
+  return String(movie.director)
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .some((d) => d === target);
+}
+
+function activateDirectorDig(directorName) {
+  const clean = String(directorName || "").trim();
+  if (!clean || clean === "不明") return;
+  resetAllFilterControls({ preserveSavedPrefs: false });
+  state.activeDirector = clean;
+  setActiveMainView("browse");
+  const modal = document.getElementById("movie-modal");
+  if (modal && modal.open) {
+    modal.close();
+  }
+  renderMovies();
+}
+
+function clearDirectorDig() {
+  state.activeDirector = "";
+  renderMovies();
+}
+
+function activateMoodTagFilter(tagName) {
+  const clean = String(tagName || "").trim();
+  if (!clean) return;
+  clearActivePreset();
+  state.activeMoodTag = state.activeMoodTag === clean ? "" : clean;
+  setActiveMainView("browse");
+  const modal = document.getElementById("movie-modal");
+  if (modal && modal.open) {
+    modal.close();
+  }
+  renderMovies();
+}
+
+function clearMoodTagFilter() {
+  state.activeMoodTag = "";
+  renderMovies();
+}
+
+function renderDirectorDigBanner() {
+  const banner = document.getElementById("director-dig-banner");
+  if (!banner) return;
+  const dirName = String(state.activeDirector || "").trim();
+  if (!dirName) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+    return;
+  }
+
+  const directorMovies = state.movies.filter((m) => movieMatchesDirector(m, dirName));
+  let watchedCount = 0;
+  let ratingSum = 0;
+  let ratedCount = 0;
+  for (const m of directorMovies) {
+    const w = state.watchMap[m.imdb_id];
+    const isWatched = Boolean(w && (w.status === "watched" || w.my_rating != null));
+    if (isWatched) watchedCount += 1;
+    if (w?.my_rating != null) {
+      ratingSum += Number(w.my_rating);
+      ratedCount += 1;
+    }
+  }
+  const avgText = ratedCount > 0 ? `（平均 ★${(ratingSum / ratedCount).toFixed(1)}）` : "";
+
+  banner.innerHTML = `
+    <div class="active-banner-text">
+      <span>🎬 <strong>${escapeHtml(dirName)}</strong> の作品：視聴済み <strong>${watchedCount} / ${directorMovies.length}本</strong>${escapeHtml(avgText)}</span>
+    </div>
+    <button id="clear-director-dig-btn" type="button" class="btn btn-secondary active-banner-clear-btn">絞り込み解除</button>
+  `;
+  banner.classList.remove("hidden");
+}
+
+function renderMoodTagBanner(matchedCount) {
+  const banner = document.getElementById("mood-tag-banner");
+  if (!banner) return;
+  const tag = String(state.activeMoodTag || "").trim();
+  if (!tag) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+    return;
+  }
+
+  banner.innerHTML = `
+    <div class="active-banner-text">
+      <span>🏷️ タグ絞り込み：<strong>#${escapeHtml(tag)}</strong>（${matchedCount}本）</span>
+    </div>
+    <button id="clear-mood-tag-btn" type="button" class="btn btn-secondary active-banner-clear-btn">解除</button>
+  `;
+  banner.classList.remove("hidden");
 }
 
 function getFilteredMovies() {
@@ -1998,6 +2187,12 @@ function getFilteredMovies() {
   const filtered = state.movies.filter((m) => {
     if (newlyEligibleIds && !newlyEligibleIds.has(m.imdb_id)) return false;
 
+    if (state.activeDirector && !movieMatchesDirector(m, state.activeDirector)) return false;
+    if (state.activeMoodTag) {
+      const tags = Array.isArray(m.mood_tags) ? m.mood_tags : [];
+      if (!tags.includes(state.activeMoodTag)) return false;
+    }
+
     if (decade !== "all") {
       const start = parseInt(decade.slice(0, 4), 10);
       if (m.release_year < start || m.release_year > start + 9) return false;
@@ -2022,7 +2217,17 @@ function getFilteredMovies() {
     const flatrate = jp.flatrate || [];
     const allProv = [...flatrate, ...(jp.rent || []), ...(jp.buy || [])];
     if (flatrateOnly && flatrate.length === 0) return false;
-    if (provider !== "all") {
+    if (provider === "__my_subs__") {
+      if (state.mySubscriptions.length > 0) {
+        const targetList = flatrateOnly ? flatrate : allProv;
+        const mySubsLower = state.mySubscriptions.map((s) => s.toLowerCase());
+        const matched = targetList.some((p) => {
+          const pl = String(p || "").toLowerCase();
+          return mySubsLower.some((sub) => pl.includes(sub));
+        });
+        if (!matched) return false;
+      }
+    } else if (provider !== "all") {
       const targetList = flatrateOnly ? flatrate : allProv;
       if (!targetList.some((p) => p.toLowerCase().includes(provider.toLowerCase()))) return false;
     }
@@ -2069,14 +2274,15 @@ function getFilteredMovies() {
   return filtered;
 }
 
-function renderMoodTags(tags, limit = null) {
+function renderMoodTags(tags, limit = null, { compact = false } = {}) {
   const list = Array.isArray(tags) ? tags.filter(Boolean) : [];
   if (list.length === 0) return "";
   const shown = limit ? list.slice(0, limit) : list;
-  return `<div class="mood-tags-row">${shown
+  const activeTag = state.activeMoodTag;
+  return `<div class="mood-tags-row ${compact ? "is-compact" : ""}">${shown
     .map(
       (tag) =>
-        `<button type="button" class="mood-tag" data-mood-tag="${escapeHtml(tag)}" title="「${escapeHtml(tag)}」で絞り込む">#${escapeHtml(tag)}</button>`
+        `<button type="button" class="mood-tag ${activeTag === tag ? "is-active" : ""}" data-mood-tag="${escapeHtml(tag)}" title="「${escapeHtml(tag)}」で絞り込む">#${escapeHtml(tag)}</button>`
     )
     .join("")}</div>`;
 }
@@ -2294,6 +2500,7 @@ function renderListRow(m) {
         </div>
         <h2 class="list-title">${escapeHtml(m.title_ja)}</h2>
         <div class="list-sub">${escapeHtml(m.title_en)}${m.runtime_minutes ? ` · ${m.runtime_minutes}分` : ""} · 総合 ${Number(m.composite_score).toFixed(1)}</div>
+        ${renderMoodTags(m.mood_tags, 2, { compact: true })}
       </div>
       <div class="list-quick-col">
         ${renderQuickBar(m, w, { compact: true })}
@@ -2307,6 +2514,8 @@ function renderMovies() {
   const grid = document.getElementById("movies-grid");
   document.getElementById("results-count").textContent = `${list.length}本表示中（全${state.movies.length}本）`;
   renderNewlyFlatrateBanner();
+  renderDirectorDigBanner();
+  renderMoodTagBanner(list.length);
   updateWatchStatsSummary();
   updateLastUpdatedLabel();
   updateRankingNavBadges();
@@ -3356,6 +3565,22 @@ function getSimilarUnwatchedMovies(
   return scored.slice(0, limit);
 }
 
+function renderClickableDirectorLinks(directorStr) {
+  const raw = String(directorStr || "").trim();
+  if (!raw || raw === "不明") return escapeHtml("不明");
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (names.length === 0) return escapeHtml("不明");
+  return names
+    .map(
+      (name) =>
+        `<button type="button" class="director-link" data-director-dig="${escapeHtml(name)}" title="${escapeHtml(name)}の監督作品で絞り込む">${escapeHtml(name)}</button>`
+    )
+    .join('<span class="director-sep">, </span>');
+}
+
 function openMovieModal(imdbId) {
   const m = state.movies.find((x) => x.imdb_id === imdbId);
   if (!m) return;
@@ -3434,7 +3659,7 @@ function openMovieModal(imdbId) {
       <div class="modal-header">
         <div>
           <h2>${escapeHtml(m.title_ja)} <span style="color:var(--text-secondary);font-size:0.9rem">(${m.release_year})</span></h2>
-          <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${escapeHtml(m.director || "不明")}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}${countryDisplay ? ` ｜ ${escapeHtml(countryDisplay)}` : ""}</div>
+          <div class="card-en">${escapeHtml(m.title_en)} ｜ 監督: ${renderClickableDirectorLinks(m.director)}${m.runtime_minutes ? ` ｜ ${m.runtime_minutes}分` : ""}${countryDisplay ? ` ｜ ${escapeHtml(countryDisplay)}` : ""}</div>
         </div>
         <button id="modal-header-close-btn" type="button" class="icon-close ${hasBackdrop ? "hidden" : ""}" data-close-modal="movie-modal" aria-label="閉じる">&times;</button>
       </div>
@@ -3455,7 +3680,7 @@ function openMovieModal(imdbId) {
           </div>
 
           ${(m.genres || []).length ? `<div class="detail-section"><h3>ジャンル</h3><div class="metrics-row">${m.genres.map((g) => `<span class="metric-chip">${escapeHtml(g)}</span>`).join("")}</div></div>` : ""}
-          ${(m.mood_tags || []).length ? `<div class="detail-section"><h3>ムードタグ（クリックで検索）</h3>${renderMoodTags(m.mood_tags)}</div>` : ""}
+          ${(m.mood_tags || []).length ? `<div class="detail-section"><h3>ムードタグ（タップで絞り込み）</h3>${renderMoodTags(m.mood_tags)}</div>` : ""}
           ${m.awards_text ? `<div class="detail-section"><h3>受賞・ノミネート</h3><p style="margin:0;font-size:0.88rem">${escapeHtml(m.awards_text)}</p></div>` : ""}
           ${m.ai_summary ? `<div class="detail-section"><h3>観るべき理由（AI解説）</h3><p style="margin:0;font-size:0.9rem">${escapeHtml(m.ai_summary)}</p></div>` : ""}
           <div class="detail-section">
@@ -3866,6 +4091,13 @@ function bindEvents() {
   ].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       clearActivePreset();
+      if (id === "filter-provider" && document.getElementById(id)?.value === "__my_subs__" && state.mySubscriptions.length === 0) {
+        showToast("マイサブスクが未登録のため全サービスを表示中（「📺 マイサブスク」から登録できます）", {
+          actionLabel: "登録する",
+          onAction: openSubscriptionsModal,
+          durationMs: 4200,
+        });
+      }
       if (
         id === "filter-provider" ||
         id === "filter-flatrate-only" ||
@@ -3887,6 +4119,41 @@ function bindEvents() {
     clearFilterPrefs();
     resetAllFilterControls();
     renderMovies();
+  });
+
+  document.getElementById("my-subs-btn")?.addEventListener("click", openSubscriptionsModal);
+
+  document.getElementById("subs-save-btn")?.addEventListener("click", () => {
+    const checked = [
+      ...document.querySelectorAll('#subs-checkbox-list input[type="checkbox"]:checked'),
+    ].map((cb) => cb.value);
+    saveMySubscriptions(checked);
+    document.getElementById("subscriptions-modal")?.close();
+    if (checked.length > 0) {
+      showToast(`マイサブスクを ${checked.length} 件保存しました`);
+    } else {
+      showToast("マイサブスク登録をクリアしました");
+    }
+    renderMovies();
+  });
+
+  document.getElementById("subs-clear-btn")?.addEventListener("click", () => {
+    document.querySelectorAll('#subs-checkbox-list input[type="checkbox"]').forEach((cb) => {
+      cb.checked = false;
+      cb.closest(".subs-option-item")?.classList.remove("is-checked");
+    });
+  });
+
+  document.getElementById("director-dig-banner")?.addEventListener("click", (e) => {
+    if (e.target.closest("#clear-director-dig-btn")) {
+      clearDirectorDig();
+    }
+  });
+
+  document.getElementById("mood-tag-banner")?.addEventListener("click", (e) => {
+    if (e.target.closest("#clear-mood-tag-btn")) {
+      clearMoodTagFilter();
+    }
   });
 
   document.getElementById("newly-flatrate-banner")?.addEventListener("click", (e) => {
@@ -4063,6 +4330,12 @@ function bindEvents() {
         return;
       }
 
+      const dirBtn = e.target.closest("[data-director-dig]");
+      if (dirBtn) {
+        activateDirectorDig(dirBtn.dataset.directorDig);
+        return;
+      }
+
       const genreBtn = e.target.closest("[data-filter-genre]");
       if (genreBtn) {
         setActiveMainView("browse");
@@ -4113,9 +4386,7 @@ function bindEvents() {
     const tagBtn = e.target.closest("[data-mood-tag]");
     if (tagBtn) {
       e.stopPropagation();
-      clearActivePreset();
-      document.getElementById("filter-query").value = tagBtn.dataset.moodTag;
-      renderMovies();
+      activateMoodTagFilter(tagBtn.dataset.moodTag);
       return;
     }
 
@@ -4124,12 +4395,15 @@ function bindEvents() {
   });
 
   document.body.addEventListener("click", (e) => {
+    const dirBtn = e.target.closest("#movie-modal [data-director-dig]");
+    if (dirBtn) {
+      activateDirectorDig(dirBtn.dataset.directorDig);
+      return;
+    }
+
     const tagBtn = e.target.closest("#movie-modal [data-mood-tag]");
     if (tagBtn) {
-      clearActivePreset();
-      document.getElementById("filter-query").value = tagBtn.dataset.moodTag;
-      document.getElementById("movie-modal").close();
-      renderMovies();
+      activateMoodTagFilter(tagBtn.dataset.moodTag);
       return;
     }
 

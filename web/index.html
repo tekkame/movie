@@ -82,7 +82,10 @@
           <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
           <button type="button" class="preset-btn" data-preset="horror_thriller">👻 ホラー・スリラー</button>
         </div>
-        <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
+        <div class="presets-actions">
+          <button id="my-subs-btn" class="btn btn-secondary my-subs-btn" type="button" title="契約中の配信サービスを複数登録">📺 マイサブスク</button>
+          <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
+        </div>
       </section>
 
       <section class="filters-panel" aria-label="映画の絞り込み">
@@ -121,12 +124,14 @@
               <label for="filter-provider">配信サービス</label>
               <select id="filter-provider">
                 <option value="all">指定なし</option>
+                <option value="__my_subs__">📺 マイサブスク（登録済みすべて）</option>
                 <option value="U-NEXT">U-NEXT</option>
                 <option value="Amazon Prime Video">Amazon Prime Video</option>
                 <option value="Netflix">Netflix</option>
                 <option value="Disney Plus">Disney+</option>
                 <option value="Hulu">Hulu</option>
                 <option value="Apple TV">Apple TV</option>
+                <option value="FOD">FOD</option>
               </select>
             </div>
 
@@ -205,6 +210,9 @@
 
       <nav id="year-tabs-bar" class="year-tabs-bar" aria-label="公開年タブ"></nav>
 
+      <div id="director-dig-banner" class="active-filter-banner hidden" role="region" aria-label="監督ディグ"></div>
+      <div id="mood-tag-banner" class="active-filter-banner active-filter-banner--tag hidden" role="region" aria-label="ムードタグ絞り込み"></div>
+
       <div class="results-bar">
         <div class="results-summary">
           <div id="results-count" class="results-count">読み込み中...</div>
@@ -280,6 +288,24 @@
       <div class="gacha-footer">
         <button id="gacha-reroll-btn" type="button" class="btn btn-primary">🎲 もう一度引く</button>
         <button type="button" class="btn btn-secondary" data-close-modal="gacha-modal">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 📺 マイサブスク登録モーダル -->
+  <dialog id="subscriptions-modal" class="modal modal-sm">
+    <div class="modal-body subs-modal-body">
+      <div class="modal-header">
+        <div>
+          <h2>📺 マイサブスク設定</h2>
+          <p class="subs-modal-subtitle">契約中の配信サービスを複数チェック（ブラウザに自動保存）</p>
+        </div>
+        <button type="button" class="icon-close" data-close-modal="subscriptions-modal" aria-label="閉じる">&times;</button>
+      </div>
+      <div id="subs-checkbox-list" class="subs-checkbox-list"></div>
+      <div class="subs-modal-footer">
+        <button id="subs-clear-btn" type="button" class="btn btn-ghost">すべて解除</button>
+        <button id="subs-save-btn" type="button" class="btn btn-primary">保存して反映</button>
       </div>
     </div>
   </dialog>

@@ -24,13 +24,21 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-SYSTEM_PROMPT = """あなたは映画キュレーターです。
+try:
+    from mood_tagger import MOOD_TAG_CATALOG
+except ImportError:
+    from pipeline.mood_tagger import MOOD_TAG_CATALOG
+
+TAG_GUIDE_EXAMPLES = " / ".join(MOOD_TAG_CATALOG)
+
+SYSTEM_PROMPT = f"""あなたは映画キュレーターです。
 与えられた映画のメタデータをもとに、以下のJSON形式のみを出力してください（余計な前置きやマークダウンは不要）。
-{
+{{
   "ai_summary": "ネタバレなしで、この映画がなぜ面白いのか・見どころは何かを日本語2〜3文（120〜180文字程度）で簡潔に書く。",
-  "mood_tags": ["映像美", "重厚サスペンス", "音楽が圧巻"]
-}
-mood_tags は3〜5個、日本語の短いタグにしてください。"""
+  "mood_tags": ["重厚サスペンス", "批評家絶賛", "余韻ドラマ"]
+}}
+mood_tags は2〜4個、日本語の短いタグにしてください。可能な限り以下の統一タグ体系を優先して使用してください：
+{TAG_GUIDE_EXAMPLES}"""
 
 
 def generate_enrichment(

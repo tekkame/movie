@@ -37,6 +37,11 @@ try:
 except ImportError:
     from pipeline.scoring import parse_awards_bonus, select_yearly_top20
 
+try:
+    from mood_tagger import generate_mood_tags
+except ImportError:
+    from pipeline.mood_tagger import generate_mood_tags
+
 IMDB_BASICS_URL = "https://datasets.imdbws.com/title.basics.tsv.gz"
 IMDB_RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz"
 OMDB_API_URL = "https://www.omdbapi.com/"
@@ -266,6 +271,9 @@ def preserve_ai_enrichment(
     """
     movies テーブルへの UPSERT 前に既存の ai_summary / mood_tags を引き継ぎ、
     Phase 2 ローカルLLMで生成済みの解説やタグが上書き消失しないようにする。
+    - 既存行に ai_summary が設定済み (IS NOT NULL / 非空) の場合は、既存の ai_summary と
+      既存の mood_tags（非空なら）を優先して保持し、自動タグで上書きしない。
+    - ai_summary が未設定の場合は、新規レコード側の自動生成 mood_tags（空なら既存）を採用する。
     PostgREST のバルク UPSERT 要件 (PGRST102: All object keys must match) を満たすため、
     全レコードで必ず同一キー（ai_summary / mood_tags を含む）を揃える。
     """
@@ -274,8 +282,16 @@ def preserve_ai_enrichment(
     for rec in records:
         item = dict(rec)
         existing = existing_map.get(item["imdb_id"], {})
-        item["ai_summary"] = item.get("ai_summary") or existing.get("ai_summary") or None
-        item["mood_tags"] = item.get("mood_tags") or existing.get("mood_tags") or []
+        existing_ai_summary = existing.get("ai_summary")
+        existing_mood_tags = existing.get("mood_tags") or []
+        has_llm_enrichment = bool(existing_ai_summary and str(existing_ai_summary).strip())
+
+        if has_llm_enrichment:
+            item["ai_summary"] = item.get("ai_summary") or existing_ai_summary
+            item["mood_tags"] = existing_mood_tags if existing_mood_tags else (item.get("mood_tags") or [])
+        else:
+            item["ai_summary"] = item.get("ai_summary") or None
+            item["mood_tags"] = item.get("mood_tags") or existing_mood_tags or []
         merged_records.append(item)
 
     if merged_records:
@@ -1290,6 +1306,7 @@ def main() -> None:
                 "mood_tags": [],
                 "updated_at": now_iso,
             }
+            record["mood_tags"] = generate_mood_tags(record)
             all_selected_records.append(record)
 
         print(f"  - {year}年: {len(top20)}本確定 (OMDbキャッシュ: {cached_count}/{len(year_cands)})", flush=True)

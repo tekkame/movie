@@ -102,22 +102,33 @@ class TestFetchAndSync(unittest.TestCase):
 
     def test_preserve_ai_enrichment_keeps_existing_summary_and_tags(self) -> None:
         new_records = [
-            {"imdb_id": "tt0001", "title_ja": "作品A"},
-            {"imdb_id": "tt0002", "title_ja": "作品B"},
+            {"imdb_id": "tt0001", "title_ja": "作品A", "mood_tags": ["自動タグ1", "自動タグ2"]},
+            {"imdb_id": "tt0002", "title_ja": "作品B", "mood_tags": ["余韻ドラマ", "批評家絶賛"]},
+            {"imdb_id": "tt0003", "title_ja": "作品C"},
         ]
         existing_rows = [
             {
                 "imdb_id": "tt0001",
                 "ai_summary": "ネタバレなしの推薦文",
                 "mood_tags": ["映像美", "重厚サスペンス"],
-            }
+            },
+            {
+                "imdb_id": "tt0002",
+                "ai_summary": None,
+                "mood_tags": ["古いタグ"],
+            },
         ]
 
         merged = fetch_and_sync.preserve_ai_enrichment(new_records, existing_rows)
+        # ai_summary IS NOT NULL の行は既存の ai_summary / mood_tags が保護され自動タグで上書きされない
         self.assertEqual(merged[0]["ai_summary"], "ネタバレなしの推薦文")
         self.assertEqual(merged[0]["mood_tags"], ["映像美", "重厚サスペンス"])
+        # ai_summary IS NULL の行は自動生成された mood_tags が反映される
         self.assertIsNone(merged[1]["ai_summary"])
-        self.assertEqual(merged[1]["mood_tags"], [])
+        self.assertEqual(merged[1]["mood_tags"], ["余韻ドラマ", "批評家絶賛"])
+        # 新規レコードで mood_tags が未指定なら []
+        self.assertIsNone(merged[2]["ai_summary"])
+        self.assertEqual(merged[2]["mood_tags"], [])
 
     def test_normalize_supabase_url_and_headers(self) -> None:
         self.assertEqual(

@@ -3844,3 +3844,188 @@ input[type="date"] {
     width: 100%;
   }
 }
+
+/* ============================================================================
+   v6: マイサブスク / 監督ディグバナー / ムードタグ絞り込みUI
+   ============================================================================ */
+
+.presets-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.my-subs-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+}
+
+.my-subs-btn.has-subs {
+  background: var(--emerald-soft);
+  border-color: var(--emerald-border);
+  color: var(--emerald-bright);
+}
+
+.subs-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.subs-checkbox-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.subs-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.subs-option-item:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.subs-option-item.is-checked {
+  background: var(--emerald-soft);
+  border-color: var(--emerald-border);
+  color: var(--emerald-bright);
+}
+
+.subs-option-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--emerald-bright);
+  flex-shrink: 0;
+}
+
+.subs-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subs-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.director-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--cyan-bright);
+  text-decoration: underline;
+  text-decoration-color: rgba(34, 211, 238, 0.45);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.director-link:hover {
+  color: var(--gold-bright);
+  text-decoration-color: var(--gold-bright);
+}
+
+.active-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.14), rgba(59, 130, 246, 0.08));
+  border: 1px solid var(--cyan-border);
+  min-width: 0;
+}
+
+.active-filter-banner--tag {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.08));
+  border-color: var(--gold-border);
+}
+
+.active-banner-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-banner-clear-btn {
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  min-height: 28px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mood-tags-row.is-compact {
+  margin-top: 2px;
+}
+
+.mood-tags-row.is-compact .mood-tag {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+}
+
+.mood-tag.is-active {
+  background: var(--gold-soft);
+  border-color: var(--gold-border);
+  color: var(--gold-bright);
+}
+
+@media (max-width: 640px) {
+  .presets-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .my-subs-btn {
+    padding: 7px 10px;
+    font-size: 0.76rem;
+  }
+
+  .subs-checkbox-list {
+    grid-template-columns: 1fr;
+  }
+
+  .active-filter-banner {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+
+  .active-banner-text {
+    font-size: 0.76rem;
+    white-space: normal;
+    line-height: 1.35;
+  }
+}
+
