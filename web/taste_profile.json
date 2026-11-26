@@ -4,48 +4,52 @@
   "awards_weight": 0.1,
   "genre_weights": {
     "Thriller": 4.5,
-    "Sci-Fi": 4.0,
-    "Horror": 4.0,
-    "Crime": 3.5,
+    "Sci-Fi": 4.5,
+    "Crime": 4.0,
+    "Horror": 3.5,
     "Mystery": 3.0,
-    "Action": 2.5,
+    "Action": 3.0,
     "Adventure": 2.0,
     "Musical": 1.5,
     "Comedy": 0.5,
+    "Animation": 0.5,
+    "Music": 0.5,
     "Drama": 0.0,
-    "Animation": 0.0,
     "Fantasy": 0.0,
-    "Music": 0.0,
     "Romance": -1.5,
-    "Family": -4.0
+    "Family": -3.5
   },
   "favorite_directors": [
     "Christopher Nolan",
     "Ryan Coogler",
     "Sean Baker",
+    "Wai Keung Lau",
+    "Alan Mak",
     "Todd Phillips",
     "Neill Blomkamp",
+    "James Cameron",
     "Bong Joon Ho",
+    "Satoshi Kon",
     "Jordan Peele",
     "Edgar Wright",
+    "Lana Wachowski",
     "Paul Thomas Anderson",
-    "Satoshi Kon",
     "Steven Spielberg",
+    "Hayao Miyazaki",
     "Wes Anderson",
     "Park Chan-wook",
     "Quentin Tarantino",
     "Ryusuke Hamaguchi",
-    "Hayao Miyazaki",
     "Makoto Shinkai",
     "Takashi Yamazaki",
-    "Joseph Kosinski",
-    "Takehiko Inoue"
+    "Joseph Kosinski"
   ],
   "preferred_decades": [
     2020,
     2010,
-    2000
+    2000,
+    1990
   ],
   "max_preferred_runtime": null,
-  "summary": "ノーラン作品（TOP10に4本）や『罪人たち』のような、圧倒的な映像・音響・構造美で没入させる体感型SF／スリラー／ホラーや、毒気とキレのあるジャンル傑作・本格日本アニメを熱烈に支持。一方、静かな内省系ドラマ・ほろ苦い恋愛劇・王道ファミリーアニメにはシビアな観客体験重視の本格派。"
+  "summary": "ノーラン作品や『罪人たち』『インファナル・アフェア』『ターミネーター2』『パプリカ』のように、一秒もダレない推進力・構造美・映像音響の没入感と強烈な余韻を兼ね備えたSF／スリラー／犯罪／本格日本アニメを最上位に推す本格派。一方、テンポの遅い雰囲気ホラーや静かな内省系ドラマ、王道ファミリーアニメにはシビア。"
 }
