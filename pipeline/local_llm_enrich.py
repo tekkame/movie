@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import sys
 from typing import Any
@@ -67,8 +68,7 @@ def generate_enrichment(
         json={
             "model": model,
             "temperature": 0.4,
-            "response_format": {"type": "json_object"},
-            "messages": [
+                        "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
@@ -76,8 +76,12 @@ def generate_enrichment(
         timeout=120,
     )
     resp.raise_for_status()
+    if resp.status_code >= 400:
+        raise RuntimeError(f"LLM API {resp.status_code}: {resp.text}")
     content = resp.json()["choices"][0]["message"]["content"]
-    parsed = json.loads(content)
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
+    m = re.search(r"\{.*\}", content, flags=re.S)
+    parsed = json.loads(m.group(0) if m else content)
     return {
         "ai_summary": str(parsed.get("ai_summary", "")).strip(),
         "mood_tags": [str(t).strip() for t in (parsed.get("mood_tags") or []) if str(t).strip()][:5],
