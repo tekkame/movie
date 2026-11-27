@@ -23,6 +23,7 @@
       </div>
       <div class="header-actions">
         <button id="toggle-ranking-btn" class="btn btn-secondary ranking-nav-btn" type="button" aria-pressed="false">🏆 マイランキング <span id="header-ranking-count" class="ranking-count-badge">0</span></button>
+        <button id="toggle-constellation-btn" class="btn btn-secondary constellation-nav-btn" type="button" aria-pressed="false">🌌 星座マップ</button>
         <button id="toggle-taste-panel-btn" class="btn btn-secondary" type="button" aria-expanded="false" aria-controls="taste-guide-panel">🧠 好み分析・使い方</button>
         <button id="copy-taste-btn" class="btn btn-secondary" type="button" title="評価履歴と好みプロファイルをAI相談用にコピー">🧠 好みデータをコピー</button>
         <span id="auth-status-badge" class="badge badge-muted">閲覧モード</span>
@@ -81,10 +82,71 @@
           <button type="button" class="preset-btn" data-preset="weekday_short">⏱ 平日サクッと</button>
           <button type="button" class="preset-btn" data-preset="holiday_masterpiece">🎬 休日にじっくり名作</button>
           <button type="button" class="preset-btn" data-preset="horror_thriller">👻 ホラー・スリラー</button>
+          <button id="toggle-vibe-panel-btn" type="button" class="preset-btn vibe-toggle-btn" aria-expanded="false" aria-controls="vibe-sliders-panel">🎚️ 気分スライダー <span id="vibe-active-dot" class="vibe-active-dot hidden" aria-hidden="true"></span></button>
         </div>
         <div class="presets-actions">
           <button id="my-subs-btn" class="btn btn-secondary my-subs-btn" type="button" title="契約中の配信サービスを複数登録">📺 マイサブスク</button>
           <button id="gacha-btn" class="btn btn-primary gacha-trigger-btn" type="button">🎲 今夜の3本ガチャ</button>
+        </div>
+      </section>
+
+      <!-- 🎚️ 気分スライダー（デフォルト折りたたみ） -->
+      <section id="vibe-sliders-panel" class="vibe-sliders-panel hidden" aria-label="5軸の気分スライダー絞り込み">
+        <div class="vibe-panel-header">
+          <div class="vibe-panel-title-wrap">
+            <span class="vibe-panel-title">🎚️ 気分スライダー（リアルタイム絞り込み）</span>
+            <span id="vibe-panel-status" class="vibe-panel-status">すべて表示（未設定）</span>
+          </div>
+          <button id="reset-vibe-btn" type="button" class="btn btn-ghost btn-sm">スライダーをリセット</button>
+        </div>
+        <div class="vibe-sliders-grid">
+          <div class="vibe-slider-item">
+            <div class="vibe-slider-head">
+              <label for="vibe-pace">テンポ（以上）</label>
+              <span id="vibe-pace-val" class="vibe-val-pill">指定なし (1+)</span>
+            </div>
+            <input id="vibe-pace" type="range" min="1" max="5" step="1" value="1" />
+            <div class="vibe-slider-hints"><span>1 静か</span><span>5 怒涛</span></div>
+          </div>
+
+          <div class="vibe-slider-item">
+            <div class="vibe-slider-head">
+              <label for="vibe-mind">頭脳度（以上）</label>
+              <span id="vibe-mind-val" class="vibe-val-pill">指定なし (1+)</span>
+            </div>
+            <input id="vibe-mind" type="range" min="1" max="5" step="1" value="1" />
+            <div class="vibe-slider-hints"><span>1 気楽</span><span>5 考察</span></div>
+          </div>
+
+          <div class="vibe-slider-item">
+            <div class="vibe-slider-head">
+              <label for="vibe-immersion">映像没入（以上）</label>
+              <span id="vibe-immersion-val" class="vibe-val-pill">指定なし (1+)</span>
+            </div>
+            <input id="vibe-immersion" type="range" min="1" max="5" step="1" value="1" />
+            <div class="vibe-slider-hints"><span>1 会話中心</span><span>5 映画館級</span></div>
+          </div>
+
+          <div class="vibe-slider-item">
+            <div class="vibe-slider-head">
+              <label for="vibe-heaviness">重さ上限（以下）</label>
+              <span id="vibe-heaviness-val" class="vibe-val-pill">指定なし (5-)</span>
+            </div>
+            <input id="vibe-heaviness" type="range" min="1" max="5" step="1" value="5" />
+            <div class="vibe-slider-hints"><span>1 爽快のみ</span><span>5 重厚もOK</span></div>
+          </div>
+
+          <div class="vibe-slider-item vibe-slider-item--toggle">
+            <div class="vibe-slider-head">
+              <span>家族で観られる</span>
+              <span id="vibe-family-val" class="vibe-val-pill">OFF</span>
+            </div>
+            <label class="checkbox-label vibe-family-label">
+              <input id="vibe-family-ok" type="checkbox" />
+              <span>👨‍👩‍👧 家族OKのみ (★4+)</span>
+            </label>
+            <div class="vibe-slider-hints"><span>暴力・ホラー除外</span></div>
+          </div>
         </div>
       </section>
 
@@ -224,7 +286,11 @@
             <span class="legend-item"><span class="dot dot-top"></span>総合TOP12</span>
             <span class="legend-item"><span class="dot dot-genre"></span>代表枠</span>
           </div>
-          <button id="results-ranking-btn" type="button" class="btn btn-secondary results-ranking-btn" aria-pressed="false">🏆 マイランキング <span id="results-ranking-count" class="ranking-count-badge">0</span></button>
+          <div class="main-view-switch" role="group" aria-label="メインビュー切り替え">
+            <button id="main-view-list-btn" type="button" class="main-view-btn active" data-main-view="browse" aria-pressed="true">一覧</button>
+            <button id="results-ranking-btn" type="button" class="main-view-btn" data-main-view="ranking" aria-pressed="false">🏆 マイランキング <span id="results-ranking-count" class="ranking-count-badge">0</span></button>
+            <button id="results-constellation-btn" type="button" class="main-view-btn" data-main-view="constellation" aria-pressed="false">🌌 星座マップ</button>
+          </div>
           <label class="checkbox-label unknown-date-toggle" title="ONの状態で「観た」や★評価を付けた作品は視聴日（日付未設定）として記録されます">
             <input id="toggle-unknown-watched-date" type="checkbox" />
             <span>📅 視聴日不明</span>
@@ -260,6 +326,47 @@
       </div>
       <div id="ranking-log-panel" class="hidden">
         <div id="annual-log-content" class="annual-log-content"></div>
+      </div>
+    </section>
+
+    <!-- 🌌 映画星座マップ ビュー -->
+    <section id="constellation-view" class="constellation-view hidden" aria-label="映画星座マップ">
+      <div class="constellation-header-bar">
+        <div class="constellation-header-left">
+          <button id="constellation-back-btn" type="button" class="btn btn-secondary">← 一覧へ戻る</button>
+          <div>
+            <h2 class="constellation-page-title">🌌 映画星座マップ</h2>
+            <p id="constellation-subtitle" class="constellation-subtitle">似たムード・テーマの作品同士が近くに光る2D星空マップ</p>
+          </div>
+        </div>
+        <div class="constellation-toolbar">
+          <div class="constellation-filter-pills">
+            <label class="checkbox-label constellation-subs-toggle">
+              <input id="constellation-my-subs-only" type="checkbox" />
+              <span>📺 マイサブスクで絞る</span>
+            </label>
+          </div>
+          <div class="constellation-zoom-controls" role="group" aria-label="星座マップズーム操作">
+            <button id="constellation-zoom-in" type="button" class="btn btn-secondary btn-sm" title="拡大">＋</button>
+            <button id="constellation-zoom-out" type="button" class="btn btn-secondary btn-sm" title="縮小">－</button>
+            <button id="constellation-zoom-reset" type="button" class="btn btn-ghost btn-sm" title="全体表示に戻す">⟲ リセット</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="constellation-missing-hint" class="constellation-hint hidden"></div>
+
+      <div class="constellation-legend" aria-label="星の凡例">
+        <span class="const-leg-item"><span class="const-dot const-dot-gold"></span>★5（あなたのお気に入り）</span>
+        <span class="const-leg-item"><span class="const-dot const-dot-watched"></span>視聴済み（★4以下）</span>
+        <span class="const-leg-item"><span class="const-dot const-dot-watchlist"></span>🔖 観たいリスト</span>
+        <span class="const-leg-item"><span class="const-dot const-dot-bright"></span>未視聴（条件一致・マッチ度サイズ）</span>
+        <span class="const-leg-item"><span class="const-dot const-dot-dim"></span>条件外</span>
+      </div>
+
+      <div id="constellation-stage" class="constellation-stage">
+        <canvas id="constellation-canvas" class="constellation-canvas" aria-label="映画星座マップキャンバス"></canvas>
+        <div id="constellation-tooltip" class="constellation-tooltip hidden" role="status"></div>
       </div>
     </section>
   </main>
@@ -329,6 +436,7 @@
 
   <script src="./config.example.js"></script>
   <script src="./config.js" onerror="/* config.js未配置時はデモモードで動作 */"></script>
+  <script src="./v7_logic.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

@@ -33,9 +33,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "双子の兄弟が故郷でダンスホールを開こうとした夜、音楽と恐怖が交錯するサバイバルを描くライアン・クーグラー監督のオリジナル作。",
+    ai_catchcopy: "ブルースが鳴り止む夜、闇が牙を剥く。",
     ai_summary:
       "ブルースの熱量とゴシックホラーが凄まじい密度で融合した快作。音響設計と緊張感の緩急が抜群で、ジャンル映画の枠を超えた没入感がある。",
-    mood_tags: ["音楽が圧巻", "不穏サバイバル", "映像美"],
+    mood_tags: ["音楽・ミュージカル", "不穏・ホラー", "重厚サスペンス"],
+    vibe_scores: { pace: 4, mind: 3, immersion: 5, heaviness: 4, family: 1 },
+    similar_ids: ["tt0114369", "tt6751668", "tt2543164"],
+    map_x: 24.5,
+    map_y: 28.0,
   },
   {
     imdb_id: "tt6751668",
@@ -69,9 +74,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "半地下で暮らす貧しい家族が、高台の豪邸に住む裕福な一家に次々と入り込んでいくブラック・スリラー。",
+    ai_catchcopy: "階段を上るたび、戻れなくなる。",
     ai_summary:
       "社会風刺と予測不能なサスペンスが完璧なテンポで噛み合う現代の傑作。笑いと戦慄が瞬時に反転する脚本の切れ味が圧巻。",
-    mood_tags: ["予測不能", "ブラックユーモア", "社会派スリラー"],
+    mood_tags: ["痛快・ブラックコメディ", "重厚サスペンス", "アジア傑作"],
+    vibe_scores: { pace: 5, mind: 4, immersion: 4, heaviness: 4, family: 2 },
+    similar_ids: ["tt0114369", "tt31193180", "tt2543164"],
+    map_x: 42.0,
+    map_y: 35.0,
   },
   {
     imdb_id: "tt2543164",
@@ -105,9 +115,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "世界各地に突如現れた巨大な宇宙船。言語学者ルイーズが異星人の文字解読に挑む知的なSFドラマ。",
+    ai_catchcopy: "言葉を解くたび、時間がほどけていく。",
     ai_summary:
       "異星人との対話を「言語学」から描く静謐で知的なSF。終盤の視点転換によって物語全体の意味が深く胸に迫る。",
-    mood_tags: ["知的SF", "静謐で美しい", "余韻が深い"],
+    mood_tags: ["SF・世界観没入", "余韻ドラマ", "頭脳戦・ミステリー"],
+    vibe_scores: { pace: 2, mind: 5, immersion: 5, heaviness: 3, family: 4 },
+    similar_ids: ["tt0245429", "tt6751668", "tt4633694"],
+    map_x: 72.0,
+    map_y: 48.0,
   },
   {
     imdb_id: "tt0245429",
@@ -141,9 +156,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "不思議な異世界に迷い込んだ少女・千尋が、八百万の神々が集う油屋で働きながら成長し元の世界へ戻る道を探す。",
+    ai_catchcopy: "名前を奪われても、心は忘れない。",
     ai_summary:
       "圧倒的なイマジネーションと緻密な生活描写が同居するアニメ映画の金字塔。久石譲の音楽とノスタルジックな色彩が忘れがたい。",
-    mood_tags: ["幻想世界", "映像美", "成長物語"],
+    mood_tags: ["本格アニメ", "アジア傑作", "オスカー受賞"],
+    vibe_scores: { pace: 3, mind: 3, immersion: 5, heaviness: 2, family: 5 },
+    similar_ids: ["tt4633694", "tt2543164", "tt6751668"],
+    map_x: 82.0,
+    map_y: 74.0,
   },
   {
     imdb_id: "tt4633694",
@@ -177,9 +197,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "新たなスパイダーマンとなった少年マイルスが、別次元から集まった仲間たちと共に巨大な危機へ立ち向かう。",
+    ai_catchcopy: "跳べ、誰も見たことのない世界へ。",
     ai_summary:
       "コミックの質感と最新CGを融合させた革新的なアニメーション表現に目を奪われる。王道ヒーロー映画としての熱さも最高峰。",
-    mood_tags: ["視覚革命", "熱い王道", "音楽が圧巻"],
+    mood_tags: ["本格アニメ", "爽快アクション", "音楽・ミュージカル"],
+    vibe_scores: { pace: 5, mind: 2, immersion: 5, heaviness: 1, family: 5 },
+    similar_ids: ["tt0245429", "tt2543164", "tt31193180"],
+    map_x: 68.0,
+    map_y: 80.0,
   },
   {
     imdb_id: "tt0114369",
@@ -213,9 +238,14 @@ const DEMO_MOVIES = [
     },
     overview_ja:
       "退職間際のベテラン刑事と血気盛んな新人刑事が、七つの大罪になぞらえた連続猟奇事件を追う。",
+    ai_catchcopy: "雨が止まない街に、最後の箱が届く。",
     ai_summary:
       "降り続く雨と退廃的な街並みが不穏さを極限まで高める暗黒サスペンス。ラストまで一切の妥協がない展開は圧巻。",
-    mood_tags: ["重厚サスペンス", "衝撃の結末", "ダークノワール"],
+    mood_tags: ["重厚サスペンス", "頭脳戦・ミステリー", "観客熱狂"],
+    vibe_scores: { pace: 4, mind: 4, immersion: 4, heaviness: 5, family: 1 },
+    similar_ids: ["tt6751668", "tt31193180", "tt2543164"],
+    map_x: 18.0,
+    map_y: 19.0,
   },
 ];
 
@@ -301,6 +331,8 @@ const SUBSCRIPTION_PROVIDERS = [
   { value: "FOD", label: "FOD" },
 ];
 
+const V7 = window.CoreCinemaLogic || {};
+
 const state = {
   supabase: null,
   isDemo: true,
@@ -316,6 +348,14 @@ const state = {
   mySubscriptions: [], // 契約中の配信サービス配列
   activeDirector: "", // 監督ディグ中の監督名
   activeMoodTag: "", // 選択中のムードタグ
+  isVibePanelOpen: false,
+  vibeFilter: {
+    paceMin: 1,
+    mindMin: 1,
+    immersionMin: 1,
+    heavinessMax: 5,
+    familyOk: false,
+  },
   newlyFlatrateFilterActive: false,
   newlyFlatrateBannerDismissed: false,
   isSyncingLocalToCloud: false,
@@ -325,11 +365,22 @@ const state = {
   isTastePanelOpen: false,
   viewMode: "card", // "card" | "list"
   unknownWatchedDate: false,
-  activeMainView: "browse", // "browse" | "ranking"
+  activeMainView: "browse", // "browse" | "ranking" | "constellation"
   activeRankingTab: "best", // "best" | "log"
   selectedLogYear: "all",
   isMobileFiltersOpen: false,
   battle: null, // { targetMovie, ranked, low, high, step, totalEstimatedSteps, queue, phase, decidedRank, isSaving }
+  constellation: {
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    mySubsOnly: false,
+    hoveredId: null,
+    selectedId: null,
+    stars: [],
+    missingCount: 0,
+    eventsBound: false,
+  },
 };
 
 function normalizeSupabaseUrl(url) {
@@ -1383,6 +1434,73 @@ function openSubscriptionsModal() {
   }
 }
 
+function setVibePanelOpen(open) {
+  state.isVibePanelOpen = Boolean(open);
+  const panel = document.getElementById("vibe-sliders-panel");
+  const btn = document.getElementById("toggle-vibe-panel-btn");
+  if (panel) panel.classList.toggle("hidden", !state.isVibePanelOpen);
+  if (btn) {
+    btn.classList.toggle("active", state.isVibePanelOpen);
+    btn.setAttribute("aria-expanded", String(state.isVibePanelOpen));
+  }
+}
+
+function isVibeFilterCurrentlyActive() {
+  return V7.isVibeFilterActive
+    ? V7.isVibeFilterActive(state.vibeFilter)
+    : state.vibeFilter.paceMin > 1 ||
+        state.vibeFilter.mindMin > 1 ||
+        state.vibeFilter.immersionMin > 1 ||
+        state.vibeFilter.heavinessMax < 5 ||
+        state.vibeFilter.familyOk;
+}
+
+function updateVibeSliderUI() {
+  const f = state.vibeFilter;
+  const paceEl = document.getElementById("vibe-pace");
+  const mindEl = document.getElementById("vibe-mind");
+  const immEl = document.getElementById("vibe-immersion");
+  const heavyEl = document.getElementById("vibe-heaviness");
+  const famEl = document.getElementById("vibe-family-ok");
+
+  if (paceEl) paceEl.value = String(f.paceMin);
+  if (mindEl) mindEl.value = String(f.mindMin);
+  if (immEl) immEl.value = String(f.immersionMin);
+  if (heavyEl) heavyEl.value = String(f.heavinessMax);
+  if (famEl) famEl.checked = Boolean(f.familyOk);
+
+  const setText = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  setText("vibe-pace-val", f.paceMin > 1 ? `★${f.paceMin}以上` : "指定なし (1+)");
+  setText("vibe-mind-val", f.mindMin > 1 ? `★${f.mindMin}以上` : "指定なし (1+)");
+  setText("vibe-immersion-val", f.immersionMin > 1 ? `★${f.immersionMin}以上` : "指定なし (1+)");
+  setText("vibe-heaviness-val", f.heavinessMax < 5 ? `★${f.heavinessMax}以下` : "指定なし (5-)");
+  setText("vibe-family-val", f.familyOk ? "ON (★4+)" : "OFF");
+
+  const active = isVibeFilterCurrentlyActive();
+  const btn = document.getElementById("toggle-vibe-panel-btn");
+  const dot = document.getElementById("vibe-active-dot");
+  const statusEl = document.getElementById("vibe-panel-status");
+  if (btn) btn.classList.toggle("has-active-vibe", active);
+  if (dot) dot.classList.toggle("hidden", !active);
+  if (statusEl) {
+    statusEl.textContent = active ? "絞り込み中（未解析作品は除外）" : "すべて表示（未設定）";
+  }
+}
+
+function resetVibeFilter() {
+  state.vibeFilter = {
+    paceMin: 1,
+    mindMin: 1,
+    immersionMin: 1,
+    heavinessMax: 5,
+    familyOk: false,
+  };
+  updateVibeSliderUI();
+}
+
 function updateActiveFiltersBadge() {
   const badge = document.getElementById("active-filters-badge");
   if (!badge) return;
@@ -1402,6 +1520,7 @@ function updateActiveFiltersBadge() {
   if (state.newlyFlatrateFilterActive) count += 1;
   if (state.activeDirector) count += 1;
   if (state.activeMoodTag) count += 1;
+  if (isVibeFilterCurrentlyActive()) count += 1;
 
   badge.textContent = String(count);
   badge.classList.toggle("hidden", count === 0);
@@ -1700,33 +1819,68 @@ async function initApp() {
   renderMovies();
 }
 
+const MOVIES_SELECT_V7_COLS =
+  "imdb_id,tmdb_id,release_year,year_rank,title_ja,title_en,original_title,original_language," +
+  "poster_url,backdrop_url,runtime_minutes,genres,director,selection_slot,selection_category," +
+  "composite_score,imdb_rating,imdb_votes,metascore,rt_score,awards_text,awards_bonus," +
+  "jp_providers,overview_ja,country,newly_flatrate_providers,newly_flatrate_at," +
+  "ai_summary,ai_catchcopy,mood_tags,vibe_scores,similar_ids,map_x,map_y,updated_at";
+
+const MOVIES_SELECT_LEGACY_COLS =
+  "imdb_id,tmdb_id,release_year,year_rank,title_ja,title_en,original_title,original_language," +
+  "poster_url,backdrop_url,runtime_minutes,genres,director,selection_slot,selection_category," +
+  "composite_score,imdb_rating,imdb_votes,metascore,rt_score,awards_text,awards_bonus," +
+  "jp_providers,overview_ja,country,newly_flatrate_providers,newly_flatrate_at," +
+  "ai_summary,mood_tags,updated_at";
+
 async function fetchAllMoviesPaginated() {
   const pageSize = 1000;
-  const allMovies = [];
-  let from = 0;
+  let selectClause = "*";
+  let attemptedLegacyFallback = false;
 
   while (true) {
-    const to = from + pageSize - 1;
-    const { data, error } = await state.supabase
-      .from("movies")
-      .select("*")
-      .order("release_year", { ascending: false })
-      .order("year_rank", { ascending: true })
-      .range(from, to);
+    const allMovies = [];
+    let from = 0;
+    let lastError = null;
 
-    if (error) {
-      return { data: null, error };
+    while (true) {
+      const to = from + pageSize - 1;
+      const { data, error } = await state.supabase
+        .from("movies")
+        .select(selectClause)
+        .order("release_year", { ascending: false })
+        .order("year_rank", { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        lastError = error;
+        break;
+      }
+
+      const batch = data || [];
+      allMovies.push(...batch);
+      if (batch.length < pageSize) {
+        break;
+      }
+      from += pageSize;
     }
 
-    const batch = data || [];
-    allMovies.push(...batch);
-    if (batch.length < pageSize) {
-      break;
+    if (!lastError) {
+      return { data: allMovies, error: null };
     }
-    from += pageSize;
+
+    const isMissingCol = V7.isMovieMissingColumnError
+      ? V7.isMovieMissingColumnError(lastError)
+      : String(lastError.code || "") === "PGRST204" || String(lastError.code || "") === "42703";
+
+    if (!attemptedLegacyFallback && isMissingCol) {
+      attemptedLegacyFallback = true;
+      selectClause = selectClause === "*" ? MOVIES_SELECT_LEGACY_COLS : "imdb_id,release_year,year_rank,title_ja,title_en,poster_url,runtime_minutes,genres,director,selection_slot,selection_category,composite_score,imdb_rating,imdb_votes,metascore,rt_score,awards_text,awards_bonus,jp_providers,overview_ja,ai_summary,mood_tags,updated_at";
+      continue;
+    }
+
+    return { data: null, error: lastError };
   }
-
-  return { data: allMovies, error: null };
 }
 
 function mergeWatchEntry(remoteEntry, localEntry) {
@@ -2008,6 +2162,7 @@ function resetAllFilterControls({ keepPreset = false, preserveSavedPrefs = false
   state.newlyFlatrateFilterActive = false;
   state.activeDirector = "";
   state.activeMoodTag = "";
+  resetVibeFilter();
   if (!keepPreset) {
     state.activePreset = null;
     state.presetGenres = null;
@@ -2235,11 +2390,16 @@ function getFilteredMovies() {
     const wStatus = state.watchMap[m.imdb_id]?.status || "unwatched";
     if (watch !== "all" && wStatus !== watch) return false;
 
+    if (V7.matchesVibeFilter && !V7.matchesVibeFilter(m, state.vibeFilter)) {
+      return false;
+    }
+
     if (query) {
       const haystack = [
         m.title_ja,
         m.title_en,
         m.director,
+        m.ai_catchcopy,
         getMovieCountryString(m),
         ...(m.genres || []),
         ...(m.mood_tags || []),
@@ -2388,28 +2548,56 @@ function updateRankingNavBadges() {
   if (headerBadge) headerBadge.textContent = String(rankedCount);
   if (resultsBadge) resultsBadge.textContent = String(rankedCount);
 
-  const headerBtn = document.getElementById("toggle-ranking-btn");
-  const resultsBtn = document.getElementById("results-ranking-btn");
+  const headerRankBtn = document.getElementById("toggle-ranking-btn");
+  const headerConstBtn = document.getElementById("toggle-constellation-btn");
+  const listSwitchBtn = document.getElementById("main-view-list-btn");
+  const resultsRankBtn = document.getElementById("results-ranking-btn");
+  const resultsConstBtn = document.getElementById("results-constellation-btn");
+
+  const isBrowse = state.activeMainView === "browse";
   const isRanking = state.activeMainView === "ranking";
-  if (headerBtn) {
-    headerBtn.classList.toggle("active", isRanking);
-    headerBtn.setAttribute("aria-pressed", String(isRanking));
+  const isConst = state.activeMainView === "constellation";
+
+  if (headerRankBtn) {
+    headerRankBtn.classList.toggle("active", isRanking);
+    headerRankBtn.setAttribute("aria-pressed", String(isRanking));
   }
-  if (resultsBtn) {
-    resultsBtn.classList.toggle("active", isRanking);
-    resultsBtn.setAttribute("aria-pressed", String(isRanking));
+  if (headerConstBtn) {
+    headerConstBtn.classList.toggle("active", isConst);
+    headerConstBtn.setAttribute("aria-pressed", String(isConst));
+  }
+  if (listSwitchBtn) {
+    listSwitchBtn.classList.toggle("active", isBrowse);
+    listSwitchBtn.setAttribute("aria-pressed", String(isBrowse));
+  }
+  if (resultsRankBtn) {
+    resultsRankBtn.classList.toggle("active", isRanking);
+    resultsRankBtn.setAttribute("aria-pressed", String(isRanking));
+  }
+  if (resultsConstBtn) {
+    resultsConstBtn.classList.toggle("active", isConst);
+    resultsConstBtn.setAttribute("aria-pressed", String(isConst));
   }
 }
 
 function setActiveMainView(viewName) {
-  state.activeMainView = viewName === "ranking" ? "ranking" : "browse";
+  if (viewName === "ranking" || viewName === "constellation") {
+    state.activeMainView = viewName;
+  } else {
+    state.activeMainView = "browse";
+  }
   const browseView = document.getElementById("browse-view");
   const rankingView = document.getElementById("ranking-view");
+  const constView = document.getElementById("constellation-view");
   if (browseView) browseView.classList.toggle("hidden", state.activeMainView !== "browse");
   if (rankingView) rankingView.classList.toggle("hidden", state.activeMainView !== "ranking");
+  if (constView) constView.classList.toggle("hidden", state.activeMainView !== "constellation");
+
   updateRankingNavBadges();
   if (state.activeMainView === "ranking") {
     renderRankingView();
+  } else if (state.activeMainView === "constellation") {
+    renderConstellationView();
   } else {
     renderMovies();
   }
@@ -2477,6 +2665,7 @@ function renderListRow(m) {
   const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
   const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
   const isHighMatch = matchScore >= 85;
+  const catchcopyText = m.ai_catchcopy ? String(m.ai_catchcopy).trim() : "";
   const rowClasses = [
     "movie-list-row",
     isWatched ? "is-watched" : "",
@@ -2499,6 +2688,7 @@ function renderListRow(m) {
           ${flatrate.map((p) => `<span class="badge badge-flatrate">${escapeHtml(p)}</span>`).join("")}
         </div>
         <h2 class="list-title">${escapeHtml(m.title_ja)}</h2>
+        ${catchcopyText ? `<div class="card-catchcopy">${escapeHtml(catchcopyText)}</div>` : ""}
         <div class="list-sub">${escapeHtml(m.title_en)}${m.runtime_minutes ? ` · ${m.runtime_minutes}分` : ""} · 総合 ${Number(m.composite_score).toFixed(1)}</div>
         ${renderMoodTags(m.mood_tags, 2, { compact: true })}
       </div>
@@ -2524,6 +2714,8 @@ function renderMovies() {
   renderTasteAnalyticsDashboard();
   if (state.activeMainView === "ranking") {
     renderRankingView();
+  } else if (state.activeMainView === "constellation") {
+    renderConstellationView();
   }
 
   grid.classList.toggle("is-list-mode", state.viewMode === "list");
@@ -2549,6 +2741,7 @@ function renderMovies() {
       const slotClass = m.selection_slot === "top12" ? "slot-top12" : "slot-genre";
       const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
       const isHighMatch = matchScore >= 85;
+      const catchcopyText = m.ai_catchcopy ? String(m.ai_catchcopy).trim() : "";
 
       const ribbonHtml = isWatched
         ? `<span class="watched-ribbon">✓ WATCHED${w?.my_rating ? ` ★${w.my_rating}` : ""}</span>`
@@ -2590,6 +2783,7 @@ function renderMovies() {
               <span>${m.runtime_minutes ? `${m.runtime_minutes}分` : ""}</span>
             </div>
             <h2 class="card-title">${escapeHtml(m.title_ja)}</h2>
+            ${catchcopyText ? `<div class="card-catchcopy" title="${escapeHtml(catchcopyText)}">${escapeHtml(catchcopyText)}</div>` : ""}
             <div class="card-en">${escapeHtml(m.title_en)}</div>
             <div class="metrics-row">
               <span class="metric-chip">IMDb ${m.imdb_rating ?? "-"}</span>
@@ -3461,7 +3655,7 @@ async function handleRankingRowAction(action, imdbId) {
    🎭 似ている未視聴映画3本レコメンド
    ============================================================================ */
 
-function getSimilarUnwatchedMovies(
+function getRuleBasedSimilarUnwatchedMovies(
   targetMovie,
   allMovies = state.movies,
   watchMap = state.watchMap,
@@ -3565,6 +3759,55 @@ function getSimilarUnwatchedMovies(
   return scored.slice(0, limit);
 }
 
+function getSimilarUnwatchedMovies(
+  targetMovie,
+  allMovies = state.movies,
+  watchMap = state.watchMap,
+  tasteProfile = state.tasteProfile,
+  limit = 3
+) {
+  if (!targetMovie) return [];
+  const userSignals = buildUserPreferenceSignals();
+  const merged = V7.mergeSimilarUnwatchedMovies
+    ? V7.mergeSimilarUnwatchedMovies(
+        targetMovie,
+        allMovies,
+        watchMap,
+        (tMovie, moviesList, wMap, lim) =>
+          getRuleBasedSimilarUnwatchedMovies(tMovie, moviesList, wMap, tasteProfile, lim),
+        limit
+      )
+    : getRuleBasedSimilarUnwatchedMovies(targetMovie, allMovies, watchMap, tasteProfile, limit);
+
+  return merged.map((item) => ({
+    ...item,
+    matchScore:
+      item.matchScore != null
+        ? item.matchScore
+        : computeMatchScore(item.movie, tasteProfile, userSignals),
+  }));
+}
+
+function renderModalVibeBarsHtml(movie) {
+  const scores = V7.normalizeVibeScores ? V7.normalizeVibeScores(movie?.vibe_scores) : null;
+  if (!scores) return "";
+  const axes = [
+    { key: "pace", label: "テンポ" },
+    { key: "mind", label: "頭脳度" },
+    { key: "immersion", label: "映像没入" },
+    { key: "heaviness", label: "重厚・重さ" },
+    { key: "family", label: "家族OK" },
+  ];
+  const rowsHtml = axes
+    .map((ax) => {
+      const val = scores[ax.key];
+      const starText = V7.renderVibeStarText ? V7.renderVibeStarText(val) : "★".repeat(val) + "☆".repeat(5 - val);
+      return `<div class="modal-vibe-row"><span class="modal-vibe-label">${escapeHtml(ax.label)}</span><span class="modal-vibe-stars" aria-label="${escapeHtml(ax.label)} 5点満点中${val}点">${escapeHtml(starText)}</span></div>`;
+    })
+    .join("");
+  return `<div class="detail-section"><h3>作品の体感バランス</h3><div class="modal-vibe-grid">${rowsHtml}</div></div>`;
+}
+
 function renderClickableDirectorLinks(directorStr) {
   const raw = String(directorStr || "").trim();
   if (!raw || raw === "不明") return escapeHtml("不明");
@@ -3652,6 +3895,11 @@ function openMovieModal(imdbId) {
     `
       : "";
 
+  const catchcopyLeadHtml = m.ai_catchcopy
+    ? `<p class="modal-catchcopy-lead">${escapeHtml(m.ai_catchcopy)}</p>`
+    : "";
+  const vibeBarsHtml = renderModalVibeBarsHtml(m);
+
   const modalBody = document.getElementById("modal-body");
   modalBody.innerHTML = `
     ${backdropBanner}
@@ -3663,6 +3911,7 @@ function openMovieModal(imdbId) {
         </div>
         <button id="modal-header-close-btn" type="button" class="icon-close ${hasBackdrop ? "hidden" : ""}" data-close-modal="movie-modal" aria-label="閉じる">&times;</button>
       </div>
+      ${catchcopyLeadHtml}
 
       <div class="modal-grid">
         <div>
@@ -3681,6 +3930,7 @@ function openMovieModal(imdbId) {
 
           ${(m.genres || []).length ? `<div class="detail-section"><h3>ジャンル</h3><div class="metrics-row">${m.genres.map((g) => `<span class="metric-chip">${escapeHtml(g)}</span>`).join("")}</div></div>` : ""}
           ${(m.mood_tags || []).length ? `<div class="detail-section"><h3>ムードタグ（タップで絞り込み）</h3>${renderMoodTags(m.mood_tags)}</div>` : ""}
+          ${vibeBarsHtml}
           ${m.awards_text ? `<div class="detail-section"><h3>受賞・ノミネート</h3><p style="margin:0;font-size:0.88rem">${escapeHtml(m.awards_text)}</p></div>` : ""}
           ${m.ai_summary ? `<div class="detail-section"><h3>観るべき理由（AI解説）</h3><p style="margin:0;font-size:0.9rem">${escapeHtml(m.ai_summary)}</p></div>` : ""}
           <div class="detail-section">
@@ -4421,6 +4671,68 @@ function bindEvents() {
     }
   });
 
+  // v7: 気分スライダー トグル & リアルタイム絞り込み
+  document.getElementById("toggle-vibe-panel-btn")?.addEventListener("click", () => {
+    setVibePanelOpen(!state.isVibePanelOpen);
+  });
+  document.getElementById("reset-vibe-btn")?.addEventListener("click", () => {
+    resetVibeFilter();
+    renderMovies();
+  });
+  const bindVibeRange = (elId, key) => {
+    document.getElementById(elId)?.addEventListener("input", (e) => {
+      state.vibeFilter[key] = Number(e.target.value);
+      updateVibeSliderUI();
+      renderMovies();
+    });
+  };
+  bindVibeRange("vibe-pace", "paceMin");
+  bindVibeRange("vibe-mind", "mindMin");
+  bindVibeRange("vibe-immersion", "immersionMin");
+  bindVibeRange("vibe-heaviness", "heavinessMax");
+  document.getElementById("vibe-family-ok")?.addEventListener("change", (e) => {
+    state.vibeFilter.familyOk = Boolean(e.target.checked);
+    updateVibeSliderUI();
+    renderMovies();
+  });
+
+  // v7: 星座マップ トグル & 戻る & ズーム
+  document.getElementById("main-view-list-btn")?.addEventListener("click", () => setActiveMainView("browse"));
+  document.getElementById("toggle-constellation-btn")?.addEventListener("click", () => {
+    setActiveMainView(state.activeMainView === "constellation" ? "browse" : "constellation");
+  });
+  document.getElementById("results-constellation-btn")?.addEventListener("click", () => {
+    setActiveMainView("constellation");
+  });
+  document.getElementById("constellation-back-btn")?.addEventListener("click", () => {
+    setActiveMainView("browse");
+  });
+  document.getElementById("constellation-my-subs-only")?.addEventListener("change", (e) => {
+    const checked = Boolean(e.target.checked);
+    if (checked && state.mySubscriptions.length === 0) {
+      e.target.checked = false;
+      state.constellation.mySubsOnly = false;
+      showToast("マイサブスクが未登録です（「📺 マイサブスク」から登録できます）", {
+        actionLabel: "登録する",
+        onAction: openSubscriptionsModal,
+        durationMs: 4200,
+      });
+      return;
+    }
+    state.constellation.mySubsOnly = checked;
+    renderConstellationView();
+  });
+  document.getElementById("constellation-zoom-in")?.addEventListener("click", () => zoomConstellationBy(1.32));
+  document.getElementById("constellation-zoom-out")?.addEventListener("click", () => zoomConstellationBy(1 / 1.32));
+  document.getElementById("constellation-zoom-reset")?.addEventListener("click", () => {
+    state.constellation.zoom = 1;
+    state.constellation.panX = 0;
+    state.constellation.panY = 0;
+    state.constellation.selectedId = null;
+    updateConstellationTooltip(null);
+    drawConstellationCanvas();
+  });
+
   document.getElementById("auth-btn").addEventListener("click", async () => {
     if (state.isDemo) return;
     if (state.user) {
@@ -4443,6 +4755,454 @@ function bindEvents() {
       ? `エラー: ${error.message}`
       : "ログイン用リンクをメール送信しました。受信箱のリンクをクリックしてください。";
   });
+}
+
+/* ============================================================================
+   🌌 v7: 映画星座マップ（HTML5 Canvas + ズーム・パン・ツールチップ）
+   ============================================================================ */
+
+function buildConstellationFilteredIdSet() {
+  const baseList = getFilteredMovies();
+  const baseSet = new Set(baseList.map((m) => m.imdb_id));
+  if (!state.constellation.mySubsOnly || state.mySubscriptions.length === 0) {
+    return baseSet;
+  }
+  const mySubsLower = state.mySubscriptions.map((s) => s.toLowerCase());
+  const narrowed = new Set();
+  for (const m of baseList) {
+    const flatrate = m.jp_providers?.flatrate || [];
+    if (flatrate.some((p) => mySubsLower.some((sub) => String(p || "").toLowerCase().includes(sub)))) {
+      narrowed.add(m.imdb_id);
+    }
+  }
+  return narrowed;
+}
+
+function getConstellationCanvasMetrics() {
+  const canvas = document.getElementById("constellation-canvas");
+  const stage = document.getElementById("constellation-stage");
+  if (!canvas || !stage) return null;
+  const rect = stage.getBoundingClientRect();
+  const width = Math.max(280, Math.round(rect.width || stage.clientWidth || 640));
+  const height = Math.max(280, Math.round(rect.height || stage.clientHeight || 420));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  return { canvas, width, height, dpr };
+}
+
+function projectStarToScreen(star, width, height) {
+  const c = state.constellation;
+  const padX = 24;
+  const padY = 24;
+  const usableW = Math.max(40, width - padX * 2);
+  const usableH = Math.max(40, height - padY * 2);
+  const normX = (star.mapX - 5) / 90;
+  const normY = (star.mapY - 5) / 90;
+  const baseX = padX + normX * usableW;
+  const baseY = padY + normY * usableH;
+  const cx = width / 2;
+  const cy = height / 2;
+  return {
+    x: cx + (baseX - cx) * c.zoom + c.panX,
+    y: cy + (baseY - cy) * c.zoom + c.panY,
+  };
+}
+
+function zoomConstellationBy(factor, anchorX = null, anchorY = null) {
+  const metrics = getConstellationCanvasMetrics();
+  if (!metrics) return;
+  const c = state.constellation;
+  const oldZoom = c.zoom;
+  const nextZoom = Math.max(0.7, Math.min(8.0, oldZoom * factor));
+  if (Math.abs(nextZoom - oldZoom) < 1e-4) return;
+  const cx = metrics.width / 2;
+  const cy = metrics.height / 2;
+  const ax = anchorX != null ? anchorX : cx;
+  const ay = anchorY != null ? anchorY : cy;
+  const ratio = nextZoom / oldZoom;
+  c.panX = ax - cx - (ax - cx - c.panX) * ratio;
+  c.panY = ay - cy - (ay - cy - c.panY) * ratio;
+  c.zoom = nextZoom;
+  drawConstellationCanvas();
+}
+
+function updateConstellationTooltip(star) {
+  const el = document.getElementById("constellation-tooltip");
+  if (!el) return;
+  if (!star || !star.movie) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const m = star.movie;
+  const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
+  const streamText = flatrate.length > 0 ? flatrate.join("・") : "見放題情報なし";
+  const catchText = m.ai_catchcopy ? String(m.ai_catchcopy).trim() : "";
+  const statusTag =
+    star.rating != null
+      ? `★${star.rating}`
+      : star.isWatchlist
+        ? "🔖 観たい"
+        : "未視聴";
+
+  el.innerHTML = `
+    <div class="const-tt-title">${escapeHtml(m.title_ja)} <span style="color:var(--text-secondary);font-weight:600">(${m.release_year})</span></div>
+    ${catchText ? `<div class="const-tt-catch">${escapeHtml(catchText)}</div>` : ""}
+    <div class="const-tt-meta">
+      <span class="metric-chip metric-match">マッチ ${star.matchScore}%</span>
+      <span class="metric-chip">${escapeHtml(statusTag)}</span>
+      <span class="metric-chip">📺 ${escapeHtml(streamText)}</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm const-tt-open-btn" data-const-open="${escapeHtml(m.imdb_id)}">詳細を開く</button>
+  `;
+  el.classList.remove("hidden");
+}
+
+function findStarAtCanvasPoint(px, py) {
+  const metrics = getConstellationCanvasMetrics();
+  if (!metrics) return null;
+  let best = null;
+  let bestDist = Infinity;
+  const hitThreshold = 16;
+  for (const star of state.constellation.stars) {
+    const pos = projectStarToScreen(star, metrics.width, metrics.height);
+    const dist = Math.hypot(pos.x - px, pos.y - py);
+    const r = star.baseRadius * Math.min(1.5, Math.sqrt(state.constellation.zoom)) + 7;
+    if (dist <= Math.max(hitThreshold, r) && dist < bestDist) {
+      bestDist = dist;
+      best = star;
+    }
+  }
+  return best;
+}
+
+function drawConstellationCanvas() {
+  const metrics = getConstellationCanvasMetrics();
+  if (!metrics) return;
+  const { canvas, width, height, dpr } = metrics;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  // 背景星雲グラデーション & 微細背景星
+  const grad = ctx.createRadialGradient(width * 0.5, height * 0.45, 10, width * 0.5, height * 0.5, Math.max(width, height) * 0.72);
+  grad.addColorStop(0, "rgba(22, 33, 62, 0.52)");
+  grad.addColorStop(0.55, "rgba(9, 13, 26, 0.85)");
+  grad.addColorStop(1, "rgba(3, 5, 10, 0.98)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  for (let i = 0; i < 60; i += 1) {
+    const bx = ((i * 197 + 31) % 997) / 997 * width;
+    const by = ((i * 313 + 73) % 991) / 991 * height;
+    const alpha = 0.08 + (i % 5) * 0.04;
+    ctx.fillStyle = `rgba(226, 232, 240, ${alpha})`;
+    ctx.fillRect(bx, by, 1.3, 1.3);
+  }
+
+  const stars = state.constellation.stars || [];
+  if (stars.length === 0) {
+    ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+    ctx.font = "600 13px 'Noto Sans JP', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("星座座標（map_x, map_y）が設定された映画がありません", width / 2, height / 2);
+    ctx.restore();
+    return;
+  }
+
+  const zoomScale = Math.min(1.65, 0.82 + 0.25 * state.constellation.zoom);
+  const drawOrder = {
+    unwatched_dim: 0,
+    watched: 1,
+    unwatched_bright: 2,
+    watchlist: 3,
+    rating5: 4,
+  };
+  const sorted = [...stars].sort((a, b) => (drawOrder[a.category] || 0) - (drawOrder[b.category] || 0));
+
+  // ★5の星同士やアクティブ星へのほのかな星座線（選択/ホバー時）
+  const activeId = state.constellation.selectedId || state.constellation.hoveredId;
+  if (activeId) {
+    const activeStar = stars.find((s) => s.imdb_id === activeId);
+    if (activeStar) {
+      const p1 = projectStarToScreen(activeStar, width, height);
+      const simSet = new Set(Array.isArray(activeStar.movie.similar_ids) ? activeStar.movie.similar_ids : []);
+      ctx.save();
+      ctx.strokeStyle = "rgba(34, 211, 238, 0.35)";
+      ctx.lineWidth = 1;
+      for (const other of stars) {
+        if (simSet.has(other.imdb_id)) {
+          const p2 = projectStarToScreen(other, width, height);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  const screenPts = new Map();
+  for (const s of sorted) {
+    const pos = projectStarToScreen(s, width, height);
+    screenPts.set(s.imdb_id, pos);
+    if (pos.x < -30 || pos.x > width + 30 || pos.y < -30 || pos.y > height + 30) continue;
+
+    const r = s.baseRadius * zoomScale;
+    const isHighlighted = s.imdb_id === activeId;
+
+    ctx.save();
+    if (s.category === "rating5") {
+      ctx.shadowColor = "rgba(251, 191, 36, 0.9)";
+      ctx.shadowBlur = isHighlighted ? 20 : 14;
+      ctx.fillStyle = "#fbbf24";
+    } else if (s.category === "watchlist") {
+      ctx.shadowColor = "rgba(34, 211, 238, 0.85)";
+      ctx.shadowBlur = isHighlighted ? 16 : 11;
+      ctx.fillStyle = "#22d3ee";
+    } else if (s.category === "watched") {
+      ctx.shadowColor = "rgba(203, 213, 225, 0.35)";
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = "rgba(203, 213, 225, 0.72)";
+    } else if (s.category === "unwatched_bright") {
+      ctx.shadowColor = "rgba(52, 211, 153, 0.65)";
+      ctx.shadowBlur = isHighlighted ? 14 : 8;
+      ctx.fillStyle = "#34d399";
+    } else {
+      ctx.fillStyle = "rgba(100, 116, 139, 0.34)";
+    }
+
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, isHighlighted ? r + 2 : r, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isHighlighted) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ★5上位タイトルなどを重ねずにラベル表示
+  const labelCandidates = stars
+    .filter((s) => s.category === "rating5" || (state.constellation.zoom >= 1.6 && s.category === "watchlist") || (state.constellation.zoom >= 2.2 && s.category === "unwatched_bright"))
+    .sort((a, b) => b.labelPriority - a.labelPriority)
+    .slice(0, state.constellation.zoom >= 2.0 ? 22 : 12);
+
+  const placedBoxes = [];
+  ctx.font = "600 11px 'Noto Sans JP', sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  for (const s of labelCandidates) {
+    const pos = screenPts.get(s.imdb_id);
+    if (!pos || pos.x < 10 || pos.x > width - 40 || pos.y < 14 || pos.y > height - 14) continue;
+    const title = String(s.movie.title_ja || "").slice(0, 16);
+    const tx = pos.x + s.baseRadius * zoomScale + 5;
+    const ty = pos.y;
+    const tw = ctx.measureText(title).width;
+    const box = { x1: tx - 2, y1: ty - 8, x2: tx + tw + 4, y2: ty + 8 };
+    const overlaps = placedBoxes.some(
+      (b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2)
+    );
+    if (overlaps) continue;
+    placedBoxes.push(box);
+
+    ctx.fillStyle = "rgba(5, 8, 16, 0.72)";
+    ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1);
+    ctx.fillStyle = s.category === "rating5" ? "#fde68a" : "#e2e8f0";
+    ctx.fillText(title, tx, ty);
+  }
+
+  ctx.restore();
+}
+
+function bindConstellationCanvasEvents() {
+  if (state.constellation.eventsBound) return;
+  const canvas = document.getElementById("constellation-canvas");
+  const tooltip = document.getElementById("constellation-tooltip");
+  if (!canvas) return;
+  state.constellation.eventsBound = true;
+
+  let dragging = false;
+  let dragMoved = false;
+  let lastX = 0;
+  let lastY = 0;
+  let pinchStartDist = 0;
+
+  const getLocalXY = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging = true;
+    dragMoved = false;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture?.(e.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    const pt = getLocalXY(e.clientX, e.clientY);
+    if (dragging) {
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      if (Math.hypot(dx, dy) > 3) dragMoved = true;
+      state.constellation.panX += dx;
+      state.constellation.panY += dy;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      drawConstellationCanvas();
+      return;
+    }
+    const hit = findStarAtCanvasPoint(pt.x, pt.y);
+    const nextHoverId = hit ? hit.imdb_id : null;
+    if (nextHoverId !== state.constellation.hoveredId) {
+      state.constellation.hoveredId = nextHoverId;
+      canvas.style.cursor = hit ? "pointer" : "grab";
+      if (!state.constellation.selectedId) {
+        updateConstellationTooltip(hit);
+      }
+      drawConstellationCanvas();
+    }
+  });
+
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    if (!dragMoved) {
+      const pt = getLocalXY(e.clientX, e.clientY);
+      const hit = findStarAtCanvasPoint(pt.x, pt.y);
+      if (hit) {
+        if (state.constellation.selectedId === hit.imdb_id) {
+          openMovieModal(hit.imdb_id);
+        } else {
+          state.constellation.selectedId = hit.imdb_id;
+          updateConstellationTooltip(hit);
+          drawConstellationCanvas();
+        }
+      } else {
+        state.constellation.selectedId = null;
+        updateConstellationTooltip(null);
+        drawConstellationCanvas();
+      }
+    }
+  };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", () => {
+    dragging = false;
+  });
+
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const pt = getLocalXY(e.clientX, e.clientY);
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      zoomConstellationBy(factor, pt.x, pt.y);
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    },
+    { passive: true }
+  );
+
+  canvas.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches.length === 2 && pinchStartDist > 0) {
+        e.preventDefault();
+        const curDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = curDist / pinchStartDist;
+        if (Math.abs(factor - 1) > 0.03) {
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const pt = getLocalXY(midX, midY);
+          zoomConstellationBy(factor, pt.x, pt.y);
+          pinchStartDist = curDist;
+        }
+      }
+    },
+    { passive: false }
+  );
+
+  if (tooltip) {
+    tooltip.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-const-open]");
+      if (btn) {
+        openMovieModal(btn.dataset.constOpen);
+      }
+    });
+  }
+
+  window.addEventListener("resize", () => {
+    if (state.activeMainView === "constellation") {
+      drawConstellationCanvas();
+    }
+  });
+}
+
+function renderConstellationView() {
+  bindConstellationCanvasEvents();
+
+  const userSignals = buildUserPreferenceSignals();
+  const matchMap = new Map();
+  for (const m of state.movies) {
+    matchMap.set(m.imdb_id, computeMatchScore(m, state.tasteProfile, userSignals));
+  }
+  const filteredSet = buildConstellationFilteredIdSet();
+  const model = V7.buildConstellationStarModel
+    ? V7.buildConstellationStarModel(state.movies, state.watchMap, filteredSet, matchMap)
+    : { stars: [], missingCount: state.movies.length, totalCount: state.movies.length };
+
+  state.constellation.stars = model.stars;
+  state.constellation.missingCount = model.missingCount;
+
+  const hintEl = document.getElementById("constellation-missing-hint");
+  if (hintEl) {
+    if (model.stars.length === 0) {
+      hintEl.textContent =
+        "星座マップの座標（map_x / map_y）がまだ生成されていません。自宅PCで `python pipeline/build_constellation.py` を実行すると星空が点灯します。";
+      hintEl.classList.remove("hidden");
+    } else if (model.missingCount > 0) {
+      hintEl.textContent = `${model.stars.length}本を星座に配置中（座標未生成の ${model.missingCount}本はスキップ中）`;
+      hintEl.classList.remove("hidden");
+    } else {
+      hintEl.classList.add("hidden");
+      hintEl.textContent = "";
+    }
+  }
+
+  const activeStar = state.constellation.selectedId
+    ? model.stars.find((s) => s.imdb_id === state.constellation.selectedId) || null
+    : null;
+  updateConstellationTooltip(activeStar);
+  requestAnimationFrame(drawConstellationCanvas);
 }
 
 initApp();

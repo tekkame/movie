@@ -38,7 +38,12 @@ CREATE TABLE IF NOT EXISTS public.movies (
   newly_flatrate_at        TIMESTAMPTZ,
   -- Phase 2: 自宅PCのローカルLLMが後から同期するカラム（Phase 1ではNULL）
   ai_summary               TEXT,
+  ai_catchcopy             TEXT,
   mood_tags                TEXT[] DEFAULT '{}',
+  vibe_scores              JSONB,
+  similar_ids              TEXT[] NOT NULL DEFAULT '{}',
+  map_x                    DOUBLE PRECISION,
+  map_y                    DOUBLE PRECISION,
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -89,6 +94,21 @@ ALTER TABLE public.movies
 
 ALTER TABLE public.movies
   ADD COLUMN IF NOT EXISTS newly_flatrate_at TIMESTAMPTZ;
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS ai_catchcopy TEXT;
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS vibe_scores JSONB;
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS similar_ids TEXT[] NOT NULL DEFAULT '{}';
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS map_x DOUBLE PRECISION;
+
+ALTER TABLE public.movies
+  ADD COLUMN IF NOT EXISTS map_y DOUBLE PRECISION;
 
 ALTER TABLE public.user_watch_status
   ADD COLUMN IF NOT EXISTS impression_tags TEXT[] DEFAULT '{}';

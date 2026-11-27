@@ -4029,3 +4029,470 @@ input[type="date"] {
   }
 }
 
+/* ============================================================================
+   v7: AIキャッチコピー / 気分スライダー / 5軸ミニバー / メインビュー切替 / 星座マップ
+   ============================================================================ */
+
+.card-catchcopy {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-catchcopy-lead {
+  margin: 0 0 12px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(6, 182, 212, 0.08));
+  border-left: 3px solid var(--gold-bright);
+  color: #fef3c7;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.vibe-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vibe-toggle-btn.has-active-vibe {
+  border-color: var(--cyan-border);
+  color: var(--cyan-bright);
+}
+
+.vibe-active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan-bright);
+  box-shadow: 0 0 8px var(--cyan-bright);
+  display: inline-block;
+}
+
+.vibe-sliders-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--cyan-border);
+  border-radius: var(--radius-lg);
+  padding: 13px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  width: 100%;
+  min-width: 0;
+}
+
+.vibe-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 11px;
+}
+
+.vibe-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vibe-panel-title {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.vibe-panel-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--cyan-bright);
+  background: var(--cyan-soft);
+  border: 1px solid var(--cyan-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.vibe-sliders-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.vibe-slider-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vibe-slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.vibe-val-pill {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vibe-slider-item input[type="range"] {
+  width: 100%;
+  accent-color: var(--cyan-bright);
+  cursor: pointer;
+  margin: 2px 0;
+}
+
+.vibe-slider-hints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.vibe-family-label {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.76rem;
+  padding: 6px 8px;
+  margin-top: auto;
+}
+
+/* モーダル内5軸ミニバー */
+.modal-vibe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 10px;
+}
+
+.modal-vibe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+}
+
+.modal-vibe-label {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.modal-vibe-stars {
+  color: var(--gold-bright);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 0.76rem;
+}
+
+/* メインビュー 3択スイッチ */
+.main-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 3px;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.main-view-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.main-view-btn:hover {
+  color: var(--text-primary);
+}
+
+.main-view-btn.active {
+  background: var(--gold-soft);
+  color: var(--gold-bright);
+  box-shadow: inset 0 0 0 1px var(--gold-border);
+}
+
+.constellation-nav-btn.active {
+  background: var(--cyan-soft);
+  border-color: var(--cyan-border);
+  color: var(--cyan-bright);
+}
+
+/* 🌌 映画星座マップ */
+.constellation-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.constellation-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 13px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.constellation-header-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.constellation-page-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.constellation-subtitle {
+  margin: 2px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.constellation-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.constellation-subs-toggle {
+  font-size: 0.76rem;
+  padding: 5px 10px;
+}
+
+.constellation-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.constellation-hint {
+  padding: 9px 13px;
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.constellation-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.const-leg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.const-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.const-dot-gold {
+  background: #fbbf24;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.const-dot-watched {
+  background: #cbd5e1;
+  box-shadow: 0 0 4px rgba(203, 213, 225, 0.6);
+}
+
+.const-dot-watchlist {
+  background: #22d3ee;
+  box-shadow: 0 0 8px #06b6d4;
+}
+
+.const-dot-bright {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
+}
+
+.const-dot-dim {
+  background: #475569;
+  opacity: 0.55;
+}
+
+.constellation-stage {
+  position: relative;
+  width: 100%;
+  height: min(68vh, 620px);
+  min-height: 380px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: radial-gradient(circle at 50% 45%, #0c1224 0%, #05070e 70%, #030408 100%);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.75), 0 18px 40px rgba(0, 0, 0, 0.55);
+  touch-action: none;
+}
+
+.constellation-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.constellation-canvas:active {
+  cursor: grabbing;
+}
+
+.constellation-tooltip {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: min(310px, calc(100% - 24px));
+  background: rgba(9, 12, 20, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.72);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.const-tt-title {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.const-tt-catch {
+  font-size: 0.74rem;
+  color: #fde68a;
+  font-weight: 600;
+}
+
+.const-tt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.const-tt-open-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 960px) {
+  .vibe-sliders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vibe-slider-item--toggle {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .card-catchcopy {
+    font-size: 0.69rem;
+  }
+
+  .vibe-sliders-panel {
+    padding: 11px 11px;
+  }
+
+  .vibe-sliders-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .main-view-switch {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .main-view-btn {
+    justify-content: center;
+    padding: 6px 4px;
+    font-size: 0.7rem;
+  }
+
+  .constellation-header-bar {
+    padding: 11px 12px;
+  }
+
+  .constellation-stage {
+    height: 62vh;
+    min-height: 340px;
+  }
+
+  .constellation-legend {
+    gap: 5px 10px;
+    font-size: 0.68rem;
+  }
+}
