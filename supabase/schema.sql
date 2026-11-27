@@ -140,3 +140,5 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT SELECT ON public.movies TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_watch_status TO authenticated;
 GRANT ALL ON public.movies, public.omdb_cache, public.user_watch_status TO service_role;
+-- 本番DB定義と一致させるため、未認証(anon)ロールからの書き込み権限を明示的に剥奪
+REVOKE INSERT, UPDATE, DELETE ON public.user_watch_status FROM anon;
