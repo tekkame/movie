@@ -312,7 +312,7 @@ class TestFetchAndSync(unittest.TestCase):
             "tt_2025_stale": {"fetched_at": (now - timedelta(days=20)).isoformat()},
             "tt_2024_cached": {"fetched_at": (now - timedelta(days=60)).isoformat()},
         }
-        existing_counts = {2026: 20, 2025: 20, 2024: 20, 1999: 0}
+        existing_counts = {2026: 25, 2025: 25, 2024: 25, 1999: 0}
 
         plan = fetch_and_sync.plan_omdb_fetch_and_sync_years(
             candidates_by_year=candidates_by_year,
@@ -343,8 +343,8 @@ class TestFetchAndSync(unittest.TestCase):
 
         # weekly 時の年同期判定:
         # - 直近2年（2026, 2025）は常に同期
-        # - 過去年（2024）は newly_fetched_years に含まれなければ（movies=20本済み）スキップ、含まれれば同期
-        # - 過去年（1999）は既存 movies=0 (<20) なので新規OMDbが無くても既存キャッシュ分だけで同期対象
+        # - 過去年（2024）は newly_fetched_years に含まれなければ（movies=25本済み）スキップ、含まれれば同期
+        # - 過去年（1999）は既存 movies=0 (<25) なので新規OMDbが無くても既存キャッシュ分だけで同期対象
         self.assertTrue(fetch_and_sync.should_sync_year_movies(2026, current_year, "weekly", set(), existing_counts))
         self.assertFalse(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", set(), existing_counts))
         self.assertTrue(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", {2024}, existing_counts))
@@ -504,6 +504,112 @@ class TestFetchAndSync(unittest.TestCase):
         )
         self.assertEqual(provs4, [])
         self.assertIsNone(at4)
+
+    def test_select_year_candidates_rescues_cult_and_jp_discover(self) -> None:
+        # 枠1(35本)＋枠2(15本)の50本が別作品で埋まっていても、
+        # jp_discover_ids の日本映画と imdb_votes>=80,000 & rating>=7.0 の人気カルト候補がプールから漏れないこと
+        items = [
+            {
+                "imdb_id": f"tt_top_{i:02d}",
+                "release_year": 2016,
+                "title_en": f"Top Film {i}",
+                "genres": ["Drama"],
+                "imdb_rating": 8.5 - i * 0.01,
+                "imdb_votes": 60000 + i * 100,
+            }
+            for i in range(40)
+        ]
+        items.extend(
+            [
+                {
+                    "imdb_id": f"tt_pop_{i:02d}",
+                    "release_year": 2016,
+                    "title_en": f"Popular Genre {i}",
+                    "genres": ["Action", "Comedy"],
+                    "imdb_rating": 6.9,
+                    "imdb_votes": 300000 + i * 1000,
+                }
+                for i in range(18)
+            ]
+        )
+        # 投票数控えめ(35,000票)・IMDb 6.8 の日本映画（TMDB Discoverで確保）
+        items.append(
+            {
+                "imdb_id": "tt4262980",
+                "release_year": 2016,
+                "title_en": "Shin Godzilla",
+                "genres": ["Action", "Drama", "Sci-Fi"],
+                "imdb_rating": 6.8,
+                "imdb_votes": 35000,
+            }
+        )
+        # 80,000票以上 & IMDb 7.9 の人気カルト（ジャンル条件が枠2に漏れても枠4で救済）
+        items.append(
+            {
+                "imdb_id": "tt_cult_drama",
+                "release_year": 2016,
+                "title_en": "Cult Favorite",
+                "genres": ["Biography", "Music"],
+                "imdb_rating": 7.9,
+                "imdb_votes": 225000,
+            }
+        )
+
+        selected = fetch_and_sync.select_year_candidates_multibucket(
+            items,
+            year=2016,
+            candidates_per_year=60,
+            current_year=2026,
+            jp_discover_ids={"tt4262980"},
+        )
+        selected_ids = {m["imdb_id"] for m in selected}
+        self.assertIn("tt4262980", selected_ids)
+        self.assertIn("tt_cult_drama", selected_ids)
+        jp_entry = next(m for m in selected if m["imdb_id"] == "tt4262980")
+        self.assertEqual(jp_entry.get("original_language"), "ja")
+
+    def test_download_imdb_candidates_relaxes_jp_votes_to_5000(self) -> None:
+        ratings_tsv = (
+            "tconst\taverageRating\tnumVotes\n"
+            "tt_jp_6000\t7.2\t6000\n"
+            "tt_other_6000\t8.5\t6000\n"
+        )
+        basics_tsv = (
+            "tconst\ttitleType\tprimaryTitle\toriginalTitle\tisAdult\tstartYear\tendYear\truntimeMinutes\tgenres\n"
+            "tt_jp_6000\tmovie\tJP Indie\tJP Indie\t0\t2016\t\\N\t110\tDrama\n"
+            "tt_other_6000\tmovie\tOther Indie\tOther Indie\t0\t2016\t\\N\t110\tDrama\n"
+        )
+        with patch.object(
+            fetch_and_sync.requests,
+            "get",
+            side_effect=[_make_gz_response(ratings_tsv), _make_gz_response(basics_tsv)],
+        ):
+            res = fetch_and_sync.download_imdb_candidates(
+                2016,
+                2016,
+                jp_discover_by_year={2016: {"tt_jp_6000"}},
+            )
+        ids = {m["imdb_id"] for m in res[2016]}
+        self.assertIn("tt_jp_6000", ids)
+        self.assertNotIn("tt_other_6000", ids)
+
+    def test_preserve_ai_enrichment_omits_v7_null_columns(self) -> None:
+        records = [
+            {
+                "imdb_id": "tt0001",
+                "title_ja": "作品A",
+                "ai_summary": None,
+                "ai_catchcopy": None,
+                "vibe_scores": None,
+                "similar_ids": None,
+                "map_x": None,
+                "map_y": None,
+                "mood_tags": ["自動タグ"],
+            }
+        ]
+        merged = fetch_and_sync.preserve_ai_enrichment(records, [])
+        for col in ("ai_catchcopy", "vibe_scores", "similar_ids", "map_x", "map_y"):
+            self.assertNotIn(col, merged[0])
 
 
 if __name__ == "__main__":

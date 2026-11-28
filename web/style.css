@@ -958,6 +958,18 @@ textarea::placeholder {
   border: 1px solid rgba(34, 211, 238, 0.45);
 }
 
+.slot-cult {
+  background: rgba(249, 115, 22, 0.26);
+  color: #fed7aa;
+  border: 1px solid rgba(251, 146, 60, 0.55);
+}
+
+.slot-japan {
+  background: rgba(244, 63, 94, 0.24);
+  color: #fecdd3;
+  border: 1px solid rgba(251, 113, 133, 0.52);
+}
+
 .poster-bottom-badges {
   position: absolute;
   left: 9px;

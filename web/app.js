@@ -2353,7 +2353,13 @@ function getFilteredMovies() {
       if (m.release_year < start || m.release_year > start + 9) return false;
     }
     if (year !== "all" && String(m.release_year) !== year) return false;
-    if (slot !== "all" && m.selection_slot !== slot) return false;
+    if (slot !== "all") {
+      if (slot.startsWith("cat:")) {
+        if (m.selection_category !== slot.slice(4)) return false;
+      } else if (m.selection_slot !== slot) {
+        return false;
+      }
+    }
 
     if (excludeIndia && isIndianMovieClient(m)) return false;
     if (countryFilter && !matchesCountryFilter(m, countryFilter)) return false;
@@ -2738,7 +2744,20 @@ function renderMovies() {
       const isWatchlist = w?.status === "watchlist";
       const personalRank = normalizePersonalRank(w?.personal_rank);
       const flatrate = (m.jp_providers?.flatrate || []).slice(0, 2);
-      const slotClass = m.selection_slot === "top12" ? "slot-top12" : "slot-genre";
+      const slotClass =
+        m.selection_slot === "top12"
+          ? "slot-top12"
+          : m.selection_category === "観客カルト枠"
+            ? "slot-cult"
+            : m.selection_category === "日本映画枠"
+              ? "slot-japan"
+              : "slot-genre";
+      const slotLabel =
+        m.selection_category === "観客カルト枠"
+          ? "🔥 観客カルト枠"
+          : m.selection_category === "日本映画枠"
+            ? "🇯🇵 日本映画枠"
+            : m.selection_category;
       const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
       const isHighMatch = matchScore >= 85;
       const catchcopyText = m.ai_catchcopy ? String(m.ai_catchcopy).trim() : "";
@@ -2771,7 +2790,7 @@ function renderMovies() {
           <div class="poster-wrap">
             ${renderPosterImageOrFallback(m, { variant: "card", imgClass: "card-poster" })}
             <span class="score-pill">${Number(m.composite_score).toFixed(1)}</span>
-            <span class="slot-pill ${slotClass}">${escapeHtml(m.selection_category)}</span>
+            <span class="slot-pill ${slotClass}">${escapeHtml(slotLabel)}</span>
             <div class="poster-bottom-badges">
               <span class="match-pill" title="あなたへのマッチ度">マッチ ${matchScore}%</span>
               ${ribbonHtml}

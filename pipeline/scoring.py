@@ -1,20 +1,26 @@
 """
-Core Cinema Archive - スコアリング & 年別ハイブリッド20本選出ロジック
+Core Cinema Archive - スコアリング & 年別ハイブリッド25本選出ロジック
 """
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
 
-# 各年20本のうち、総合上位12本を除いた残り8本を割り当てるジャンル・地域代表枠
+# 各年25本のうち、総合上位12本を除いた基本ジャンル・地域代表枠（8本）
 GENRE_PICK_BUCKETS: list[tuple[str, int]] = [
     ("ホラー・スリラー枠", 2),
     ("SF・アクション枠", 2),
     ("非英語圏枠", 2),
     ("犯罪・ミステリー・コメディ枠", 2),
 ]
+
+CULT_PICK_CATEGORY = "観客カルト枠"
+CULT_PICK_QUOTA = 3
+JAPAN_PICK_CATEGORY = "日本映画枠"
+JAPAN_PICK_QUOTA = 2
 
 HORROR_THRILLER_GENRES = {"Horror", "Thriller"}
 SCIFI_ACTION_GENRES = {"Sci-Fi", "Action", "Adventure", "Fantasy"}
@@ -139,6 +145,55 @@ def is_indian_movie(c: dict[str, Any]) -> bool:
     return False
 
 
+def is_japanese_movie(c: dict[str, Any]) -> bool:
+    """
+    原語・主要言語が日本語('ja'/'japanese')、または原語情報がない場合に単独製作国が'Japan'かを判定する。
+    ハリウッド映画の「United States, Japan」共同製作表記で英語作品が日本映画枠に誤爆するのを防ぐ。
+    """
+    orig_lang = str(c.get("original_language") or "").strip().lower()
+    if orig_lang and orig_lang != "n/a":
+        first_orig = orig_lang.split(",")[0].strip()
+        if first_orig in ("ja", "japanese"):
+            return True
+        # original_language が明示的に日本語以外（例: 'en', 'ko'）なら日本映画ではない
+        return False
+
+    lang = str(c.get("language") or "").strip().lower()
+    if lang and lang != "n/a":
+        first_lang = lang.split(",")[0].strip()
+        if first_lang in ("ja", "japanese"):
+            return True
+        return False
+
+    country = str(c.get("country") or "").strip().lower()
+    if country and country != "n/a":
+        countries = [part.strip() for part in country.split(",") if part.strip()]
+        if countries and countries[0] == "japan":
+            return True
+
+    return False
+
+
+def compute_cult_score(imdb_rating: float | None, imdb_votes: int | None) -> float:
+    """
+    観客カルト枠用スコア: Metascore・映画賞を使わず IMDb評価と投票数のみで算出。
+      cult_score = imdb_rating * 10 + min(15.0, math.log10(imdb_votes) * 3.0)
+    """
+    rating = float(imdb_rating or 0.0)
+    votes = max(1, int(imdb_votes or 0))
+    return rating * 10.0 + min(15.0, math.log10(votes) * 3.0)
+
+
+def compute_jp_score(imdb_rating: float | None, imdb_votes: int | None) -> float:
+    """
+    日本映画枠用スコア: 海外Metascoreの低さで不当に落ちないよう IMDb評価と投票数で算出。
+      jp_score = imdb_rating * 10 + min(10.0, math.log10(max(imdb_votes, 1)) * 2.0)
+    """
+    rating = float(imdb_rating or 0.0)
+    votes = max(1, int(imdb_votes or 0))
+    return rating * 10.0 + min(10.0, math.log10(votes) * 2.0)
+
+
 def _is_non_english(movie: dict[str, Any]) -> bool:
     lang = (movie.get("original_language") or movie.get("language") or "").strip().lower()
     if not lang or lang == "n/a":
@@ -161,16 +216,19 @@ def _matches_bucket(movie: dict[str, Any], bucket_name: str) -> bool:
     return False
 
 
-def select_yearly_top20(
+def select_yearly_top25(
     candidates: list[dict[str, Any]],
-    target_count: int = 20,
+    target_count: int = 25,
     top_n: int = 12,
     max_indian_per_year: int = 2,
+    cult_quota: int = CULT_PICK_QUOTA,
+    japan_quota: int = JAPAN_PICK_QUOTA,
 ) -> list[dict[str, Any]]:
     """
-    1年分の候補リストから、総合上位12本＋ジャンル・非英語圏代表枠8本の
-    ハイブリッド編成で最大20本を選出し、year_rank (1..20) を付与して返す。
-    - is_manual_pick == True の作品は年別TOP20へ無条件で優先選出する。
+    1年分の候補リストから、総合上位12本＋既存ジャンル代表枠8本＋
+    観客カルト枠3本＋日本映画枠2本のハイブリッド編成で最大25本を選出し、
+    year_rank (1..25) を付与して返す。
+    - is_manual_pick == True の作品は年別TOP25へ無条件で優先選出する。
     - 1年の中でインド映画（is_indian_movie）は合計最大 max_indian_per_year 本までに制限する。
     """
     scored: list[dict[str, Any]] = []
@@ -234,7 +292,7 @@ def select_yearly_top20(
         _add_selected(movie, "top12", "総合TOP12")
         top12_count += 1
 
-    # 2. 残り8本をジャンル・非英語圏代表枠から補完
+    # 2. 既存ジャンル・非英語圏代表枠（8本）を補完
     remaining_pool = [m for m in scored if m["imdb_id"] not in selected_ids]
 
     for bucket_name, quota in GENRE_PICK_BUCKETS:
@@ -248,17 +306,71 @@ def select_yearly_top20(
                 _add_selected(movie, "genre_pick", bucket_name)
                 picked_in_bucket += 1
 
-    # 3. もし枠に空きが残った場合は総合スコア次点から補充
-    for movie in remaining_pool:
+    # 3. 🔥 観客カルト人気枠（3本・新設）
+    # Metascoreや映画賞を一切使わず、未選出候補（imdb_votes >= 30,000 かつ imdb_rating >= 7.0）から
+    # cult_score 上位 cult_quota 本を選出（インド映画上限キャップは継続）
+    if cult_quota > 0 and len(selected) < target_count:
+        cult_pool = [
+            m
+            for m in scored
+            if m["imdb_id"] not in selected_ids
+            and int(m.get("imdb_votes") or 0) >= 30000
+            and float(m.get("imdb_rating") or 0.0) >= 7.0
+        ]
+        cult_pool.sort(
+            key=lambda x: (
+                compute_cult_score(x.get("imdb_rating"), x.get("imdb_votes")),
+                int(x.get("imdb_votes") or 0),
+                float(x.get("imdb_rating") or 0.0),
+            ),
+            reverse=True,
+        )
+        picked_cult = 0
+        for movie in cult_pool:
+            if len(selected) >= target_count or picked_cult >= cult_quota:
+                break
+            if not _can_pick(movie):
+                continue
+            _add_selected(movie, "genre_pick", CULT_PICK_CATEGORY)
+            picked_cult += 1
+
+    # 4. 🇯🇵 日本映画枠（2本・新設）
+    # 未選出候補のうち original_language == 'ja' または country に 'Japan' を含む作品から
+    # jp_score 上位 japan_quota 本を選出
+    if japan_quota > 0 and len(selected) < target_count:
+        jp_pool = [
+            m
+            for m in scored
+            if m["imdb_id"] not in selected_ids and is_japanese_movie(m)
+        ]
+        jp_pool.sort(
+            key=lambda x: (
+                compute_jp_score(x.get("imdb_rating"), x.get("imdb_votes")),
+                int(x.get("imdb_votes") or 0),
+                float(x.get("imdb_rating") or 0.0),
+            ),
+            reverse=True,
+        )
+        picked_jp = 0
+        for movie in jp_pool:
+            if len(selected) >= target_count or picked_jp >= japan_quota:
+                break
+            if not _can_pick(movie):
+                continue
+            _add_selected(movie, "genre_pick", JAPAN_PICK_CATEGORY)
+            picked_jp += 1
+
+    # 5. もし枠に空きが残った場合は総合スコア次点から補充
+    for movie in scored:
         if len(selected) >= target_count:
             break
         if not _can_pick(movie):
             continue
         _add_selected(movie, "genre_pick", "総合次点枠")
 
-    # 4. 非インド映画だけでは target_count に達しない極端なケースのみキャップを緩めて補充
+    # 6. 非インド映画だけでは target_count に達しない極端なケースのみキャップを緩めて補充
     if len(selected) < target_count:
-        for movie in remaining_pool:
+        for movie in scored:
             if len(selected) >= target_count:
                 break
             if not _can_pick(movie, allow_over_indian_cap=True):
@@ -277,3 +389,34 @@ def select_yearly_top20(
         entry["year_rank"] = idx
 
     return selected
+
+
+def select_yearly_top20(
+    candidates: list[dict[str, Any]],
+    target_count: int = 20,
+    top_n: int = 12,
+    max_indian_per_year: int = 2,
+    cult_quota: int | None = None,
+    japan_quota: int | None = None,
+) -> list[dict[str, Any]]:
+    """
+    後方互換ラッパー:
+      - target_count <= 20 かつ quota 未指定の場合は従来通り 12 + 8 の20本構成。
+      - target_count >= 25 または quota 指定時は 25本構成（カルト3 + 日本映画2）を適用する。
+    """
+    if cult_quota is None:
+        resolved_cult = CULT_PICK_QUOTA if target_count >= 25 else 0
+    else:
+        resolved_cult = cult_quota
+    if japan_quota is None:
+        resolved_japan = JAPAN_PICK_QUOTA if target_count >= 25 else 0
+    else:
+        resolved_japan = japan_quota
+    return select_yearly_top25(
+        candidates=candidates,
+        target_count=target_count,
+        top_n=top_n,
+        max_indian_per_year=max_indian_per_year,
+        cult_quota=resolved_cult,
+        japan_quota=resolved_japan,
+    )

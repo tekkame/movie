@@ -8,7 +8,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
 
-from scoring import compute_composite_score, is_indian_movie, parse_awards_bonus, select_yearly_top20
+from scoring import (
+    compute_composite_score,
+    compute_cult_score,
+    compute_jp_score,
+    is_indian_movie,
+    is_japanese_movie,
+    parse_awards_bonus,
+    select_yearly_top20,
+    select_yearly_top25,
+)
 
 
 class TestScoringAndSelection(unittest.TestCase):
@@ -201,6 +210,151 @@ class TestScoringAndSelection(unittest.TestCase):
         self.assertEqual(len(indian_selected), 2)
         selected_ids = {m["imdb_id"] for m in selected}
         self.assertIn("tt1060277", selected_ids)
+
+    def test_select_yearly_top25_cult_and_japan_slots(self) -> None:
+        # 25本選出（TOP12 + 既存ジャンル8 + 観客カルト3 + 日本映画2）を検証
+        self.assertTrue(is_japanese_movie({"original_language": "ja", "country": ""}))
+        self.assertTrue(is_japanese_movie({"original_language": "", "country": "Japan, United States"}))
+        self.assertFalse(is_japanese_movie({"original_language": "en", "country": "United States, Japan"}))
+        self.assertFalse(is_japanese_movie({"language": "English", "country": "United States, Japan"}))
+        self.assertFalse(is_japanese_movie({"original_language": "en", "country": "United States"}))
+
+        candidates = []
+        # 1. 総合TOP12＋既存ジャンル8枠を埋める高Metascore作品25本（すべて英語圏・賞付き）
+        for i in range(25):
+            genres = ["Drama"]
+            if i in (12, 13):
+                genres = ["Horror", "Thriller"]
+            elif i in (14, 15):
+                genres = ["Sci-Fi", "Action"]
+            elif i in (18, 19):
+                genres = ["Crime", "Comedy"]
+            candidates.append(
+                {
+                    "imdb_id": f"tt_prestige_{i:02d}",
+                    "release_year": 1988,
+                    "title_en": f"Prestige Film {i}",
+                    "genres": genres,
+                    "original_language": "fr" if i in (16, 17) else "en",
+                    "country": "France" if i in (16, 17) else "United States",
+                    "imdb_rating": 7.8 - i * 0.02,
+                    "imdb_votes": 28000,
+                    "metascore": 90 - i,
+                    "rt_score": 94 - i,
+                    "awards_text": "Won 1 Oscar." if i < 12 else "3 wins",
+                }
+            )
+
+        # 2. 低Metascoreでも高IMDb & 高投票数なら観客カルト枠で救済される作品（例: ブルース・ブラザーズ型）
+        cult_films = [
+            {
+                "imdb_id": "tt0080455",
+                "release_year": 1988,
+                "title_en": "The Blues Brothers Cult",
+                "genres": ["Action", "Comedy", "Music"],
+                "original_language": "en",
+                "country": "United States",
+                "imdb_rating": 7.9,
+                "imdb_votes": 225000,
+                "metascore": 60,
+                "rt_score": 73,
+                "awards_text": "",
+            },
+            {
+                "imdb_id": "tt_cult_02",
+                "release_year": 1988,
+                "title_en": "Cult Classic 2",
+                "genres": ["Comedy"],
+                "original_language": "en",
+                "country": "United States",
+                "imdb_rating": 7.6,
+                "imdb_votes": 180000,
+                "metascore": 52,
+                "rt_score": 68,
+                "awards_text": "",
+            },
+            {
+                "imdb_id": "tt_cult_03",
+                "release_year": 1988,
+                "title_en": "Cult Classic 3",
+                "genres": ["Action"],
+                "original_language": "en",
+                "country": "United States",
+                "imdb_rating": 7.5,
+                "imdb_votes": 120000,
+                "metascore": 48,
+                "rt_score": 65,
+                "awards_text": "",
+            },
+            # 投票数3万未満のためカルト枠対象外（IMDb 8.5でも弾かれる）
+            {
+                "imdb_id": "tt_low_vote_85",
+                "release_year": 1988,
+                "title_en": "Low Vote Non-Cult",
+                "genres": ["Drama"],
+                "original_language": "en",
+                "country": "United States",
+                "imdb_rating": 8.5,
+                "imdb_votes": 15000,
+                "metascore": 40,
+                "rt_score": 50,
+                "awards_text": "",
+            },
+        ]
+        candidates.extend(cult_films)
+
+        # 3. 日本映画（海外Metascoreなし/低めでも jp_score 上位2本が日本映画枠で選出される）
+        jp_films = [
+            {
+                "imdb_id": "tt4262980",
+                "release_year": 1988,
+                "title_en": "Shin Godzilla Equivalent",
+                "genres": ["Action", "Drama", "Sci-Fi"],
+                "original_language": "ja",
+                "country": "Japan",
+                "imdb_rating": 6.8,
+                "imdb_votes": 35000,
+                "metascore": 67,
+                "rt_score": 86,
+                "awards_text": "",
+            },
+            {
+                "imdb_id": "tt_jp_other",
+                "release_year": 1988,
+                "title_en": "Japanese Hit 2",
+                "genres": ["Drama"],
+                "original_language": "ja",
+                "country": "Japan",
+                "imdb_rating": 7.2,
+                "imdb_votes": 12000,
+                "metascore": None,
+                "rt_score": None,
+                "awards_text": "",
+            },
+        ]
+        candidates.extend(jp_films)
+
+        selected = select_yearly_top25(candidates, target_count=25, top_n=12, max_indian_per_year=2)
+        self.assertEqual(len(selected), 25)
+        self.assertEqual([m["year_rank"] for m in selected], list(range(1, 26)))
+
+        top12 = [m for m in selected if m["selection_slot"] == "top12"]
+        cult_selected = [m for m in selected if m["selection_category"] == "観客カルト枠"]
+        jp_selected = [m for m in selected if m["selection_category"] == "日本映画枠"]
+        self.assertEqual(len(top12), 12)
+        self.assertEqual(len(cult_selected), 3)
+        self.assertEqual(len(jp_selected), 2)
+
+        cult_ids = {m["imdb_id"] for m in cult_selected}
+        self.assertEqual(cult_ids, {"tt0080455", "tt_cult_02", "tt_cult_03"})
+        self.assertNotIn("tt_low_vote_85", {m["imdb_id"] for m in selected})
+
+        jp_ids = {m["imdb_id"] for m in jp_selected}
+        self.assertEqual(jp_ids, {"tt4262980", "tt_jp_other"})
+
+        # スコア関数の単調性確認
+        self.assertGreater(compute_cult_score(7.9, 225000), compute_cult_score(7.5, 120000))
+        self.assertGreater(compute_jp_score(7.2, 12000), compute_jp_score(6.8, 35000) - 5.0)
 
 
 if __name__ == "__main__":
