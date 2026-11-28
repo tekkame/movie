@@ -221,6 +221,13 @@
     return msg.includes(target) || details.includes(target);
   }
 
+  function normalizeSearchText(str) {
+    return String(str ?? "")
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/[・･\-\u2010-\u2015\u2212\u30fb\uff65\s_:;,.!?/\\()[\]「」『』【】〜~]+/g, "");
+  }
+
   return {
     VIBE_AXES,
     DEFAULT_VIBE_FILTER,
@@ -231,5 +238,6 @@
     buildConstellationStarModel,
     mergeSimilarUnwatchedMovies,
     isMovieMissingColumnError,
+    normalizeSearchText,
   };
 });

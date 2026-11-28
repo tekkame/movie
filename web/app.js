@@ -2318,6 +2318,16 @@ function renderMoodTagBanner(matchedCount) {
   banner.classList.remove("hidden");
 }
 
+function normalizeSearchText(str) {
+  if (typeof V7.normalizeSearchText === "function") {
+    return V7.normalizeSearchText(str);
+  }
+  return String(str ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[・･\-\u2010-\u2015\u2212\u30fb\uff65\s_:;,.!?/\\()[\]「」『』【】〜~]+/g, "");
+}
+
 function getFilteredMovies() {
   const decade = document.getElementById("filter-decade").value;
   const year = document.getElementById("filter-year").value;
@@ -2330,7 +2340,8 @@ function getFilteredMovies() {
   const countryFilter = document.getElementById("filter-country")?.value || "";
   const excludeIndia = Boolean(document.getElementById("filter-exclude-india")?.checked);
   const flatrateOnly = document.getElementById("filter-flatrate-only").checked;
-  const query = document.getElementById("filter-query").value.trim().toLowerCase();
+  const rawQuery = document.getElementById("filter-query").value.trim();
+  const normalizedQuery = normalizeSearchText(rawQuery);
   const sort = document.getElementById("filter-sort").value;
 
   const newlyEligibleIds = state.newlyFlatrateFilterActive
@@ -2400,19 +2411,20 @@ function getFilteredMovies() {
       return false;
     }
 
-    if (query) {
-      const haystack = [
-        m.title_ja,
-        m.title_en,
-        m.director,
-        m.ai_catchcopy,
-        getMovieCountryString(m),
-        ...(m.genres || []),
-        ...(m.mood_tags || []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(query)) return false;
+    if (normalizedQuery) {
+      const haystack = normalizeSearchText(
+        [
+          m.title_ja,
+          m.title_en,
+          m.original_title,
+          m.director,
+          m.ai_catchcopy,
+          getMovieCountryString(m),
+          ...(m.genres || []),
+          ...(m.mood_tags || []),
+        ].join(" ")
+      );
+      if (!haystack.includes(normalizedQuery)) return false;
     }
     return true;
   });
@@ -2749,15 +2761,21 @@ function renderMovies() {
           ? "slot-top12"
           : m.selection_category === "観客カルト枠"
             ? "slot-cult"
-            : m.selection_category === "日本映画枠"
+            : m.selection_category === "邦画実写枠" || m.selection_category === "日本映画枠"
               ? "slot-japan"
-              : "slot-genre";
+              : m.selection_category === "日本アニメ枠"
+                ? "slot-jp-anime"
+                : "slot-genre";
       const slotLabel =
         m.selection_category === "観客カルト枠"
           ? "🔥 観客カルト枠"
-          : m.selection_category === "日本映画枠"
-            ? "🇯🇵 日本映画枠"
-            : m.selection_category;
+          : m.selection_category === "邦画実写枠"
+            ? "🇯🇵 邦画実写枠"
+            : m.selection_category === "日本アニメ枠"
+              ? "🎌 日本アニメ枠"
+              : m.selection_category === "日本映画枠"
+                ? "🇯🇵 日本映画枠"
+                : m.selection_category;
       const matchScore = m._matchScore != null ? m._matchScore : computeMatchScore(m);
       const isHighMatch = matchScore >= 85;
       const catchcopyText = m.ai_catchcopy ? String(m.ai_catchcopy).trim() : "";

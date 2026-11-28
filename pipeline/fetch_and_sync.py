@@ -449,65 +449,139 @@ def build_excluded_genres(include_animation: bool = True) -> set[str]:
 GENRE_RESCUE_SET = {"Horror", "Sci-Fi", "Thriller", "Action", "Comedy"}
 
 
+def _fetch_tmdb_discover_imdb_ids(
+    year: int,
+    tmdb_api_key: str,
+    headers: dict[str, str],
+    use_bearer: bool,
+    extra_params: dict[str, Any],
+    limit: int,
+) -> set[str]:
+    """指定条件で TMDB /discover/movie を叩き、上位 limit 件の IMDb ID 集合を返す。"""
+    params: dict[str, Any] = {
+        "with_original_language": "ja",
+        "primary_release_year": year,
+        "page": 1,
+        **extra_params,
+    }
+    if not use_bearer:
+        params["api_key"] = tmdb_api_key
+
+    ids: set[str] = set()
+    try:
+        resp = requests.get(
+            f"{TMDB_API_BASE}/discover/movie",
+            headers=headers,
+            params=params,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        movies = (resp.json().get("results") or [])[:limit]
+        for m in movies:
+            tid = m.get("id")
+            if not tid:
+                continue
+            ext_params = {} if use_bearer else {"api_key": tmdb_api_key}
+            try:
+                ext_resp = requests.get(
+                    f"{TMDB_API_BASE}/movie/{tid}/external_ids",
+                    headers=headers,
+                    params=ext_params,
+                    timeout=15,
+                )
+                ext_resp.raise_for_status()
+                imdb_id = ext_resp.json().get("imdb_id")
+                if imdb_id and str(imdb_id).startswith("tt"):
+                    ids.add(str(imdb_id))
+            except Exception:
+                continue
+            time.sleep(0.02)
+        time.sleep(0.02)
+    except Exception as exc:
+        print(f"  [WARN] TMDB日本映画Discover取得スキップ ({year}年): {exc}", file=sys.stderr)
+    return ids
+
+
 def fetch_tmdb_japanese_candidates_by_year(
     start_year: int,
     end_year: int,
     tmdb_api_key: str,
-    top_n_per_year: int = 6,
-) -> dict[int, set[str]]:
+    live_top_n_per_year: int = 6,
+    anime_top_n_per_year: int = 5,
+    top_n_per_year: int | None = None,
+) -> dict[int, set[str]] | tuple[dict[int, set[str]], dict[int, set[str]]]:
     """
-    TMDB Discover API (/discover/movie?with_original_language=ja) で各年の日本映画上位を取得し、
-    external_ids から imdb_id を引いて {year: {imdb_id, ...}} を返す。
+    TMDB Discover API で各年の日本映画候補を「邦画実写」と「日本アニメ」の2系統に分けて取得し、
+    external_ids から imdb_id を引いて ({year: live_ids}, {year: anime_ids}) のタプルで返す。
+      - 邦画実写: without_genres=16 で vote_count.desc 上位6本 ＋ vote_average.desc&vote_count.gte=40 上位6本
+      - 日本アニメ: with_genres=16 で vote_count.desc 上位5本
     """
     if not tmdb_api_key:
-        return {}
+        return ({}, {})
+    if top_n_per_year is not None:
+        live_top_n_per_year = top_n_per_year
+
     headers = {"accept": "application/json"}
     use_bearer = tmdb_api_key.startswith("eyJ")
     if use_bearer:
         headers["Authorization"] = f"Bearer {tmdb_api_key}"
 
-    result: dict[int, set[str]] = defaultdict(set)
+    live_result: dict[int, set[str]] = defaultdict(set)
+    anime_result: dict[int, set[str]] = defaultdict(set)
     for year in range(start_year, end_year + 1):
-        params: dict[str, Any] = {
-            "with_original_language": "ja",
-            "primary_release_year": year,
-            "sort_by": "vote_count.desc",
-            "page": 1,
-        }
-        if not use_bearer:
-            params["api_key"] = tmdb_api_key
-        try:
-            resp = requests.get(
-                f"{TMDB_API_BASE}/discover/movie",
-                headers=headers,
-                params=params,
-                timeout=20,
-            )
-            resp.raise_for_status()
-            movies = (resp.json().get("results") or [])[:top_n_per_year]
-            for m in movies:
-                tid = m.get("id")
-                if not tid:
-                    continue
-                ext_params = {} if use_bearer else {"api_key": tmdb_api_key}
-                try:
-                    ext_resp = requests.get(
-                        f"{TMDB_API_BASE}/movie/{tid}/external_ids",
-                        headers=headers,
-                        params=ext_params,
-                        timeout=15,
-                    )
-                    ext_resp.raise_for_status()
-                    imdb_id = ext_resp.json().get("imdb_id")
-                    if imdb_id and str(imdb_id).startswith("tt"):
-                        result[year].add(str(imdb_id))
-                except Exception:
-                    continue
-                time.sleep(0.02)
-            time.sleep(0.02)
-        except Exception as exc:
-            print(f"  [WARN] TMDB日本映画Discover取得スキップ ({year}年): {exc}", file=sys.stderr)
-    return dict(result)
+        live_votes_ids = _fetch_tmdb_discover_imdb_ids(
+            year=year,
+            tmdb_api_key=tmdb_api_key,
+            headers=headers,
+            use_bearer=use_bearer,
+            extra_params={"without_genres": 16, "sort_by": "vote_count.desc"},
+            limit=live_top_n_per_year,
+        )
+        live_rating_ids = _fetch_tmdb_discover_imdb_ids(
+            year=year,
+            tmdb_api_key=tmdb_api_key,
+            headers=headers,
+            use_bearer=use_bearer,
+            extra_params={
+                "without_genres": 16,
+                "sort_by": "vote_average.desc",
+                "vote_count.gte": 40,
+            },
+            limit=live_top_n_per_year,
+        )
+        merged_live = live_votes_ids | live_rating_ids
+        if merged_live:
+            live_result[year].update(merged_live)
+
+        anime_ids = _fetch_tmdb_discover_imdb_ids(
+            year=year,
+            tmdb_api_key=tmdb_api_key,
+            headers=headers,
+            use_bearer=use_bearer,
+            extra_params={"with_genres": 16, "sort_by": "vote_count.desc"},
+            limit=anime_top_n_per_year,
+        )
+        if anime_ids:
+            anime_result[year].update(anime_ids)
+
+    return (dict(live_result), dict(anime_result))
+
+
+def _unpack_jp_discover_maps(
+    jp_discover_by_year: dict[int, set[str]] | tuple[dict[int, set[str]], dict[int, set[str]]] | None,
+) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+    """
+    後方互換: 単一の {year: set} が渡された場合は live_map とみなし、
+    (live_map, anime_map) タプルの場合はそのまま展開して返す。
+    """
+    if jp_discover_by_year is None:
+        return {}, {}
+    if isinstance(jp_discover_by_year, tuple) and len(jp_discover_by_year) == 2:
+        live_map, anime_map = jp_discover_by_year
+        return (live_map or {}, anime_map or {})
+    if isinstance(jp_discover_by_year, dict):
+        return (jp_discover_by_year, {})
+    return {}, {}
 
 
 def select_year_candidates_multibucket(
@@ -517,26 +591,32 @@ def select_year_candidates_multibucket(
     current_year: int | None = None,
     manual_picks: set[str] | None = None,
     jp_discover_ids: set[str] | None = None,
+    jp_live_discover_ids: set[str] | None = None,
+    jp_anime_discover_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    1年分の候補を以下の構造で抽出し、人気カルト作・日本映画・ジャンル傑作の取りこぼしを防ぐ:
+    1年分の候補を以下の構造で抽出し、人気カルト作・邦画実写・日本アニメ・ジャンル傑作の取りこぼしを防ぐ:
       - 枠0（manual_picks.txt 無条件収録枠）: manual_picks に含まれる作品は投票数・スコア不問で無条件収録
+      - 枠3a（邦画実写Discover候補）: jp_live_discover_ids に含まれ Animation でない作品
+        （投票数 >= 1,500、直近2年は >= 1,000）を候補プールに必ず合流。
+      - 枠3b（日本アニメDiscover候補）: jp_anime_discover_ids に含まれる作品
+        （投票数 >= 5,000、直近2年は >= 2,000）を候補プールに必ず合流。
       - 枠1（IMDb高評価・話題作枠: 上位35本）: 高評価・話題性（信頼度加重スコア）順で上位35本を選出
       - 枠2（ジャンル別人気作枠: 上位15本）: 枠1に入らなかった候補のうち、
         Horror/Sci-Fi/Thriller/Action/Comedy のいずれかを含み、
         投票数 50,000票以上（直近2年は max(15000, min_votes * 3) 以上）・IMDb 6.8以上
         （25万票以上の超大作カルトは6.5以上）の作品を投票数・人気順で上位15本選出。
-      - 枠3（日本映画枠候補: TMDB Discover上位・日本語映画）: jp_discover_ids に含まれる作品
-        （投票数 >= 5,000、直近2年は >= 2,000）を候補プールに必ず合流。
       - 枠4（人気カルト候補: imdb_votes >= 80,000 かつ imdb_rating >= 7.0）: 未選出の中から
         人気・評価上位枠が候補プールから漏れないように合流。
     """
     manual_set = manual_picks or set()
-    jp_set = jp_discover_ids or set()
+    jp_live_set = set(jp_live_discover_ids or set()) | set(jp_discover_ids or set())
+    jp_anime_set = set(jp_anime_discover_ids or set())
     ref_year = current_year if current_year is not None else dt.date.today().year
     min_votes = 3000 if year >= ref_year - 1 else 10000
     genre_pop_min_votes = max(15000, min_votes * 3) if year >= ref_year - 1 else 50000
-    jp_min_votes = 2000 if year >= ref_year - 1 else 5000
+    jp_live_min_votes = 1000 if year >= ref_year - 1 else 1500
+    jp_anime_min_votes = 2000 if year >= ref_year - 1 else 5000
 
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -557,25 +637,45 @@ def select_year_candidates_multibucket(
         )
         for x in rest:
             entry = dict(x)
-            if entry["imdb_id"] in jp_set and not entry.get("original_language"):
+            if (entry["imdb_id"] in jp_live_set or entry["imdb_id"] in jp_anime_set) and not entry.get("original_language"):
                 entry["original_language"] = "ja"
             selected.append(entry)
         return selected
 
-    # 枠3先取り準備: TMDB Discoverで確保した日本映画候補（5,000票以上 / 直近2年は2,000票以上）
-    # ※ 枠1/2/4の後でも確実に候補プールに合流できるよう、まず対象を特定しておく
-    jp_candidates = [
+    # 枠3a: TMDB Discoverで確保した邦画実写候補（1,500票以上 / 直近2年は1,000票以上）
+    jp_live_candidates = [
         x
         for x in items
-        if x["imdb_id"] in jp_set
+        if x["imdb_id"] in jp_live_set
         and x["imdb_id"] not in seen
-        and int(x.get("imdb_votes") or 0) >= jp_min_votes
+        and not any(str(g).strip().lower() == "animation" for g in (x.get("genres") or []))
+        and int(x.get("imdb_votes") or 0) >= jp_live_min_votes
     ]
-    jp_candidates.sort(
+    jp_live_candidates.sort(
         key=lambda x: (float(x["imdb_rating"]), int(x["imdb_votes"])),
         reverse=True,
     )
-    for x in jp_candidates:
+    for x in jp_live_candidates:
+        if x["imdb_id"] not in seen:
+            entry = dict(x)
+            if not entry.get("original_language"):
+                entry["original_language"] = "ja"
+            selected.append(entry)
+            seen.add(entry["imdb_id"])
+
+    # 枠3b: TMDB Discoverで確保した日本アニメ候補（5,000票以上 / 直近2年は2,000票以上）
+    jp_anime_candidates = [
+        x
+        for x in items
+        if (x["imdb_id"] in jp_anime_set or (x["imdb_id"] in jp_live_set and any(str(g).strip().lower() == "animation" for g in (x.get("genres") or []))))
+        and x["imdb_id"] not in seen
+        and int(x.get("imdb_votes") or 0) >= jp_anime_min_votes
+    ]
+    jp_anime_candidates.sort(
+        key=lambda x: (float(x["imdb_rating"]), int(x["imdb_votes"])),
+        reverse=True,
+    )
+    for x in jp_anime_candidates:
         if x["imdb_id"] not in seen:
             entry = dict(x)
             if not entry.get("original_language"):
@@ -665,27 +765,35 @@ def download_imdb_candidates(
     include_animation: bool = True,
     manual_picks: set[str] | None = None,
     tmdb_api_key: str | None = None,
-    jp_discover_by_year: dict[int, set[str]] | None = None,
+    jp_discover_by_year: dict[int, set[str]] | tuple[dict[int, set[str]], dict[int, set[str]]] | None = None,
 ) -> dict[int, list[dict[str, Any]]]:
     """
     IMDb非商用TSVデータセットをストリーミング読み込みし、
-    各年ごとの一次候補をマルチバケット（枠0 manual_picks ＋ 日本映画Discover ＋ 枠1 上位35本 ＋
-    枠2 ジャンル人気作15本 ＋ 人気カルト枠）で抽出する。
+    各年ごとの一次候補をマルチバケット（枠0 manual_picks ＋ 邦画実写/日本アニメDiscover ＋
+    枠1 上位35本 ＋ 枠2 ジャンル人気作15本 ＋ 人気カルト枠）で抽出する。
     """
     current_year = dt.date.today().year
     manual_set = manual_picks if manual_picks is not None else load_manual_picks()
     if jp_discover_by_year is None and tmdb_api_key:
-        print("[1/4] TMDB Discover で各年の日本映画上位候補を取得中...", flush=True)
+        print("[1/4] TMDB Discover で各年の日本映画（実写・アニメ2系統）上位候補を取得中...", flush=True)
         jp_discover_by_year = fetch_tmdb_japanese_candidates_by_year(
             start_year=start_year,
             end_year=end_year,
             tmdb_api_key=tmdb_api_key,
-            top_n_per_year=6,
+            live_top_n_per_year=6,
+            anime_top_n_per_year=5,
         )
-        jp_total = sum(len(v) for v in jp_discover_by_year.values())
-        print(f"  -> 日本映画Discover確保: {len(jp_discover_by_year)}年分 / 計 {jp_total:,}本", flush=True)
-    jp_map: dict[int, set[str]] = jp_discover_by_year or {}
-    all_jp_ids = {iid for ids in jp_map.values() for iid in ids}
+        live_map, anime_map = _unpack_jp_discover_maps(jp_discover_by_year)
+        live_total = sum(len(v) for v in live_map.values())
+        anime_total = sum(len(v) for v in anime_map.values())
+        print(
+            f"  -> 日本映画Discover確保: 邦画実写={live_total:,}本 / 日本アニメ={anime_total:,}本",
+            flush=True,
+        )
+    else:
+        live_map, anime_map = _unpack_jp_discover_maps(jp_discover_by_year)
+    all_live_ids = {iid for ids in live_map.values() for iid in ids}
+    all_anime_ids = {iid for ids in anime_map.values() for iid in ids}
 
     print("[1/4] IMDb ratings データセットを取得中...", flush=True)
     ratings_map: dict[str, tuple[float, int]] = {}
@@ -696,11 +804,11 @@ def download_imdb_candidates(
             for row in reader:
                 tconst = row["tconst"]
                 votes = int(row["numVotes"])
-                if votes < 2000 and tconst not in manual_set:
+                if votes < 1000 and tconst not in manual_set:
                     continue
                 ratings_map[tconst] = (float(row["averageRating"]), votes)
 
-    print(f"  -> 投票数2,000以上（＋手動指定）の作品: {len(ratings_map):,}件", flush=True)
+    print(f"  -> 投票数1,000以上（＋手動指定）の作品: {len(ratings_map):,}件", flush=True)
     print("[1/4] IMDb basics データセットから対象年代の長編映画を抽出中...", flush=True)
 
     excluded_genres = build_excluded_genres(include_animation=include_animation)
@@ -713,7 +821,14 @@ def download_imdb_candidates(
             for row in reader:
                 tconst = row["tconst"]
                 is_manual = tconst in manual_set
-                is_jp_discover = tconst in all_jp_ids
+                is_jp_live_discover = tconst in all_live_ids or tconst in live_map.get(
+                    int(row["startYear"]) if row["startYear"].isdigit() else -1,
+                    set(),
+                )
+                is_jp_anime_discover = tconst in all_anime_ids or tconst in anime_map.get(
+                    int(row["startYear"]) if row["startYear"].isdigit() else -1,
+                    set(),
+                )
                 if row["titleType"] != "movie" or (row["isAdult"] != "0" and not is_manual):
                     continue
                 if tconst not in ratings_map and not is_manual:
@@ -725,19 +840,23 @@ def download_imdb_candidates(
                 if year < start_year or year > end_year:
                     continue
 
+                raw_genres = row["genres"]
+                genres = [] if raw_genres == "\\N" else [g.strip() for g in raw_genres.split(",")]
+                if not is_manual and any(g in excluded_genres for g in genres):
+                    continue
+
+                is_anim = any(g.lower() == "animation" for g in genres)
                 rating, votes = ratings_map.get(tconst, (7.0, 0))
-                # 日本映画枠候補は 5,000票以上（直近2年は 2,000票以上）に緩和
+                # 邦画実写候補は 1,500票以上（直近2年は 1,000票以上）に緩和
+                # 日本アニメ候補は従来通り 5,000票以上（直近2年は 2,000票以上）
                 # それ以外は従来通り 10,000票以上（直近2年は 3,000票以上）
-                if is_jp_discover or tconst in jp_map.get(year, set()):
+                if is_jp_live_discover and not is_anim:
+                    min_votes = 1000 if year >= current_year - 1 else 1500
+                elif is_jp_anime_discover or (is_jp_live_discover and is_anim):
                     min_votes = 2000 if year >= current_year - 1 else 5000
                 else:
                     min_votes = 3000 if year >= current_year - 1 else 10000
                 if votes < min_votes and not is_manual:
-                    continue
-
-                raw_genres = row["genres"]
-                genres = [] if raw_genres == "\\N" else [g.strip() for g in raw_genres.split(",")]
-                if not is_manual and any(g in excluded_genres for g in genres):
                     continue
 
                 runtime_str = row["runtimeMinutes"]
@@ -757,7 +876,7 @@ def download_imdb_candidates(
                 }
                 if is_manual:
                     entry["is_manual_pick"] = True
-                if is_jp_discover or tconst in jp_map.get(year, set()):
+                if is_jp_live_discover or is_jp_anime_discover:
                     entry["original_language"] = "ja"
                 by_year[year].append(entry)
 
@@ -770,7 +889,8 @@ def download_imdb_candidates(
             candidates_per_year=candidates_per_year,
             current_year=current_year,
             manual_picks=manual_set,
-            jp_discover_ids=jp_map.get(year),
+            jp_live_discover_ids=live_map.get(year),
+            jp_anime_discover_ids=anime_map.get(year),
         )
 
     total = sum(len(v) for v in pruned.values())
@@ -1127,7 +1247,7 @@ def plan_omdb_fetch_and_sync_years(
     mode: str = "weekly",
     recent_ttl_days: int = 14,
     now_dt: Optional[datetime] = None,
-    min_movies_per_year: int = 25,
+    min_movies_per_year: int = 26,
 ) -> dict[str, Any]:
     """
     OMDb取得の優先順リストと、年ごとの「再計算・movies同期」必要性判定材料を組み立てる純粋関数。
@@ -1190,15 +1310,15 @@ def should_sync_year_movies(
     mode: str,
     newly_fetched_years: set[int],
     existing_movie_counts_by_year: dict[int, int],
-    min_movies_per_year: int = 25,
+    min_movies_per_year: int = 26,
 ) -> bool:
     """
-    その年の TOP25 再計算 & TMDB取得 & movies UPSERT を実行すべきかを判定する。
+    その年の TOP26 再計算 & TMDB取得 & movies UPSERT を実行すべきかを判定する。
       - 直近2年（year >= current_year - 1）は常に同期対象（IMDbスコア・投票数変動も反映）。
       - 3年以上前の過去年は:
           * backfill 明示実行時は従来通りすべて同期対象（ただしキャッシュ閾値チェックは呼び出し側で実施）。
-          * weekly 実行時は「今回新規OMDb取得があった年」または「moviesの収録数が25本未満の年」のみ同期し、
-            既に25本揃っていて変更がない過去年の無駄なTMDB再取得をスキップして高速化する。
+          * weekly 実行時は「今回新規OMDb取得があった年」または「moviesの収録数が26本未満の年」のみ同期し、
+            既に26本揃っていて変更がない過去年の無駄なTMDB再取得をスキップして高速化する。
     """
     if year >= current_year - 1:
         return True
@@ -1312,7 +1432,7 @@ def main() -> None:
         mode=args.mode,
         recent_ttl_days=args.recent_ttl_days,
         now_dt=now_utc,
-        min_movies_per_year=25,
+        min_movies_per_year=26,
     )
     print(
         f"  -> 取得計画: 優先1(直近2年・TTL切れ/未取得)={len(plan['priority1_queue'])}件, "
@@ -1354,8 +1474,8 @@ def main() -> None:
             flush=True,
         )
 
-    # 3. 年ごとのスコアリング & ハイブリッド25本選出 + TMDB日本語・配信取得
-    print("[3/4] 年別ハイブリッド25本選出 & TMDB日本語・配信情報を取得中...", flush=True)
+    # 3. 年ごとのスコアリング & ハイブリッド26本選出 + TMDB日本語・配信取得
+    print("[3/4] 年別ハイブリッド26本選出 & TMDB日本語・配信情報を取得中...", flush=True)
     all_selected_records: list[dict[str, Any]] = []
     processed_years: dict[int, set[str]] = {}
     now_dt_sync = datetime.now(timezone.utc)
@@ -1369,7 +1489,7 @@ def main() -> None:
             mode=args.mode,
             newly_fetched_years=newly_fetched_years,
             existing_movie_counts_by_year=dict(existing_movie_counts_by_year),
-            min_movies_per_year=25,
+            min_movies_per_year=26,
         ):
             continue
 
@@ -1395,9 +1515,9 @@ def main() -> None:
             }
             enriched.append(merged)
 
-        top25 = select_yearly_top25(enriched, target_count=25, top_n=12, max_indian_per_year=2)
-        processed_years[year] = {item["imdb_id"] for item in top25}
-        for item in top25:
+        top26 = select_yearly_top25(enriched, target_count=26, top_n=12, max_indian_per_year=2)
+        processed_years[year] = {item["imdb_id"] for item in top26}
+        for item in top26:
             tmdb_info = fetch_tmdb_jp_metadata(item["imdb_id"], tmdb_key)
             time.sleep(0.04)
             new_providers = tmdb_info.get("jp_providers") or {
@@ -1450,7 +1570,7 @@ def main() -> None:
             record["mood_tags"] = generate_mood_tags(record)
             all_selected_records.append(record)
 
-        print(f"  - {year}年: {len(top25)}本確定 (OMDbキャッシュ: {cached_count}/{len(year_cands)})", flush=True)
+        print(f"  - {year}年: {len(top26)}本確定 (OMDbキャッシュ: {cached_count}/{len(year_cands)})", flush=True)
 
     if args.dry_run:
         print(json.dumps(all_selected_records[:10], ensure_ascii=False, indent=2))

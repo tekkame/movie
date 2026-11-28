@@ -111,3 +111,18 @@ test("mergeSimilarUnwatchedMovies prioritizes unwatched similar_ids then fills w
   assert.equal(merged[0].source, "embedding");
   assert.equal(merged[2].source, "rule");
 });
+
+test("normalizeSearchText normalizes NFKC, case, middle dots, hyphens, and spaces", () => {
+  const targetTitle = logic.normalizeSearchText("ブルース･ブラザーズ");
+  assert.equal(targetTitle, "ブルースブラザーズ");
+  assert.ok(targetTitle.includes(logic.normalizeSearchText("ブルース・ブラザーズ")));
+  assert.ok(targetTitle.includes(logic.normalizeSearchText("ブルース･ブラザーズ")));
+  assert.ok(targetTitle.includes(logic.normalizeSearchText("ブルースブラザーズ")));
+  assert.ok(targetTitle.includes(logic.normalizeSearchText("ﾌﾞﾙｰｽ･ﾌﾞﾗｻﾞｰｽﾞ")));
+  assert.equal(
+    logic.normalizeSearchText("スパイダーマン：アクロス・ザ・スパイダーバース"),
+    logic.normalizeSearchText("スパイダーマン:アクロス･ザ･スパイダーバース")
+  );
+  assert.equal(logic.normalizeSearchText("Se7en / ｾﾌﾞﾝ"), "se7enセブン");
+  assert.equal(logic.normalizeSearchText(null), "");
+});

@@ -312,7 +312,7 @@ class TestFetchAndSync(unittest.TestCase):
             "tt_2025_stale": {"fetched_at": (now - timedelta(days=20)).isoformat()},
             "tt_2024_cached": {"fetched_at": (now - timedelta(days=60)).isoformat()},
         }
-        existing_counts = {2026: 25, 2025: 25, 2024: 25, 1999: 0}
+        existing_counts = {2026: 26, 2025: 26, 2024: 26, 1999: 0}
 
         plan = fetch_and_sync.plan_omdb_fetch_and_sync_years(
             candidates_by_year=candidates_by_year,
@@ -343,8 +343,8 @@ class TestFetchAndSync(unittest.TestCase):
 
         # weekly 時の年同期判定:
         # - 直近2年（2026, 2025）は常に同期
-        # - 過去年（2024）は newly_fetched_years に含まれなければ（movies=25本済み）スキップ、含まれれば同期
-        # - 過去年（1999）は既存 movies=0 (<25) なので新規OMDbが無くても既存キャッシュ分だけで同期対象
+        # - 過去年（2024）は newly_fetched_years に含まれなければ（movies=26本済み）スキップ、含まれれば同期
+        # - 過去年（1999）は既存 movies=0 (<26) なので新規OMDbが無くても既存キャッシュ分だけで同期対象
         self.assertTrue(fetch_and_sync.should_sync_year_movies(2026, current_year, "weekly", set(), existing_counts))
         self.assertFalse(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", set(), existing_counts))
         self.assertTrue(fetch_and_sync.should_sync_year_movies(2024, current_year, "weekly", {2024}, existing_counts))
@@ -592,6 +592,85 @@ class TestFetchAndSync(unittest.TestCase):
         ids = {m["imdb_id"] for m in res[2016]}
         self.assertIn("tt_jp_6000", ids)
         self.assertNotIn("tt_other_6000", ids)
+
+    def test_download_imdb_candidates_relaxes_jp_live_action_to_1500_while_keeping_anime_5000(self) -> None:
+        ratings_tsv = (
+            "tconst\taverageRating\tnumVotes\n"
+            "tt0117797\t7.4\t2800\n"
+            "tt_jp_live_1600\t7.3\t1600\n"
+            "tt_jp_live_1200\t7.8\t1200\n"
+            "tt_jp_anime_3000\t7.5\t3000\n"
+            "tt_jp_anime_6000\t7.6\t6000\n"
+            "tt_other_3000\t8.8\t3000\n"
+        )
+        basics_tsv = (
+            "tconst\ttitleType\tprimaryTitle\toriginalTitle\tisAdult\tstartYear\tendYear\truntimeMinutes\tgenres\n"
+            "tt0117797\tmovie\tSwallowtail Butterfly\tSuwarôteiru\t0\t1996\t\\N\t148\tCrime,Drama,Music\n"
+            "tt_jp_live_1600\tmovie\tJP Live 1600\tJP Live 1600\t0\t1996\t\\N\t110\tDrama\n"
+            "tt_jp_live_1200\tmovie\tJP Live 1200\tJP Live 1200\t0\t1996\t\\N\t110\tDrama\n"
+            "tt_jp_anime_3000\tmovie\tJP Anime 3000\tJP Anime 3000\t0\t1996\t\\N\t95\tAnimation,Drama\n"
+            "tt_jp_anime_6000\tmovie\tJP Anime 6000\tJP Anime 6000\t0\t1996\t\\N\t95\tAnimation,Action\n"
+            "tt_other_3000\tmovie\tOther Film\tOther Film\t0\t1996\t\\N\t105\tDrama\n"
+        )
+        with patch.object(
+            fetch_and_sync.requests,
+            "get",
+            side_effect=[_make_gz_response(ratings_tsv), _make_gz_response(basics_tsv)],
+        ):
+            res = fetch_and_sync.download_imdb_candidates(
+                1996,
+                1996,
+                jp_discover_by_year=(
+                    {1996: {"tt0117797", "tt_jp_live_1600", "tt_jp_live_1200"}},
+                    {1996: {"tt_jp_anime_3000", "tt_jp_anime_6000"}},
+                ),
+            )
+        ids = {m["imdb_id"] for m in res[1996]}
+        self.assertIn("tt0117797", ids)
+        self.assertIn("tt_jp_live_1600", ids)
+        self.assertNotIn("tt_jp_live_1200", ids)
+        self.assertNotIn("tt_jp_anime_3000", ids)
+        self.assertIn("tt_jp_anime_6000", ids)
+        self.assertNotIn("tt_other_3000", ids)
+
+    def test_fetch_tmdb_japanese_candidates_separates_live_action_and_anime(self) -> None:
+        calls: list[tuple[str, dict]] = []
+
+        def fake_get(url: str, headers=None, params=None, timeout=None):
+            calls.append((url, dict(params or {})))
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            if url.endswith("/discover/movie"):
+                if params.get("without_genres") == 16 and params.get("sort_by") == "vote_count.desc":
+                    resp.json.return_value = {"results": [{"id": 101}]}
+                elif params.get("without_genres") == 16 and params.get("sort_by") == "vote_average.desc":
+                    resp.json.return_value = {"results": [{"id": 102}]}
+                elif params.get("with_genres") == 16:
+                    resp.json.return_value = {"results": [{"id": 201}]}
+                else:
+                    resp.json.return_value = {"results": []}
+            elif url.endswith("/movie/101/external_ids"):
+                resp.json.return_value = {"imdb_id": "tt0279111"}
+            elif url.endswith("/movie/102/external_ids"):
+                resp.json.return_value = {"imdb_id": "tt0117797"}
+            elif url.endswith("/movie/201/external_ids"):
+                resp.json.return_value = {"imdb_id": "tt0245429"}
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        with patch.object(fetch_and_sync.requests, "get", side_effect=fake_get):
+            live_map, anime_map = fetch_and_sync.fetch_tmdb_japanese_candidates_by_year(
+                2001,
+                2001,
+                tmdb_api_key="dummy-tmdb-key",
+            )
+
+        self.assertEqual(live_map[2001], {"tt0279111", "tt0117797"})
+        self.assertEqual(anime_map[2001], {"tt0245429"})
+        discover_calls = [p for u, p in calls if u.endswith("/discover/movie")]
+        self.assertEqual(len(discover_calls), 3)
+        self.assertEqual(discover_calls[1].get("vote_count.gte"), 40)
 
     def test_preserve_ai_enrichment_omits_v7_null_columns(self) -> None:
         records = [

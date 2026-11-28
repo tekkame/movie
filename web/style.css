@@ -970,6 +970,12 @@ textarea::placeholder {
   border: 1px solid rgba(251, 113, 133, 0.52);
 }
 
+.slot-jp-anime {
+  background: rgba(168, 85, 247, 0.24);
+  color: #e9d5ff;
+  border: 1px solid rgba(192, 132, 252, 0.52);
+}
+
 .poster-bottom-badges {
   position: absolute;
   left: 9px;
